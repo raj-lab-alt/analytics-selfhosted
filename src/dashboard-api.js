@@ -5,13 +5,41 @@ async function getOverview(req, res) {
   const days = parseInt(req.query.days) || 7;
   const supabase = db.getClient();
   const startDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-  const { data } = await supabase
+
+  // Get aggregated daily data (yesterday and older)
+  const { data: daily } = await supabase
     .from('stats_daily')
     .select('jour, pages_vues, visiteurs, sessions')
     .eq('site_id', siteId)
     .gte('jour', startDate)
     .order('jour', { ascending: true });
-  res.json(data || []);
+
+  // Get today's raw data
+  const today = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const { data: todayEvents } = await supabase
+    .from('raw_events')
+    .select('session_id, ip_hash')
+    .eq('site_id', siteId)
+    .eq('event_type', 'pageview')
+    .gte('created_at', today)
+    .lt('created_at', tomorrow);
+
+  const result = daily || [];
+
+  if (todayEvents && todayEvents.length > 0) {
+    const sessions = new Set();
+    const visitors = new Set();
+    todayEvents.forEach(e => { sessions.add(e.session_id); visitors.add(e.ip_hash); });
+    result.push({
+      jour: today,
+      pages_vues: todayEvents.length,
+      visiteurs: visitors.size,
+      sessions: sessions.size,
+    });
+  }
+
+  res.json(result);
 }
 
 async function getTopPages(req, res) {

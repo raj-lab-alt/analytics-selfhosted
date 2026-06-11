@@ -77,13 +77,16 @@ app.get('/install', async (req, res) => {
 
 setupWebSocket(wss);
 
+// Run aggregation on startup then periodically
+aggregateDaily();
+aggregateHourly();
+setInterval(() => aggregateHourly(), 3600000);
+setInterval(() => aggregateDaily(), 86400000);
+setInterval(() => cleanup(), 3600000);
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Analytics server running on port ${PORT}`);
 });
-
-setInterval(() => aggregateHourly(), 3600000);
-setInterval(() => aggregateDaily(), 86400000);
-setInterval(() => cleanup(), 3600000);
 
 module.exports = { app, server };
