@@ -92,27 +92,44 @@ async function getRealtimeCount(req, res) {
 async function getHeatmapData(req, res) {
   const siteId = req.query.site_id || 1;
   const rawPage = req.query.page || '/';
+  const filterType = req.query.type || 'all';
   const supabase = db.getClient();
   let path = rawPage;
   try { const u = new URL(rawPage); path = u.origin + u.pathname; } catch(e) {}
   const escaped = path.replace(/[%_]/g, '\\$&');
-  const { data } = await supabase
+  let query = supabase
     .from('heatmap_events')
-    .select('x, y, viewport_w, viewport_h, scroll_y')
+    .select('x, y, viewport_w, viewport_h, scroll_y, x_ratio, y_ratio, doc_height')
     .eq('site_id', siteId)
-    .like('page_url', escaped + '%')
-    .in('event_type', ['click', 'move']);
+    .like('page_url', escaped + '%');
+  if (filterType === 'all') {
+    query = query.in('event_type', ['click', 'move', 'touch']);
+  } else {
+    query = query.eq('event_type', filterType);
+  }
+  const { data } = await query;
   const items = (data || []).map(e => {
+    if (e.x_ratio && e.y_ratio && e.doc_height) {
+      return { fx: Math.round(e.x_ratio * 1000), fy: Math.round(e.y_ratio * 1000), doc_h: e.doc_height };
+    }
     const vw = e.viewport_w || 1920, vh = e.viewport_h || 1080, sy = e.scroll_y || 0;
     const absY = e.y + sy;
     const estPageH = sy + vh;
-    return { fx: Math.round((e.x / vw) * 1000), absY, estPageH };
+    return { fx: Math.round((e.x / vw) * 1000), absY: absY, estPageH: estPageH, doc_h: 0 };
   });
   let pageHeight = 800;
-  items.forEach(i => { if (i.estPageH > pageHeight) pageHeight = i.estPageH; });
+  items.forEach(i => {
+    if (i.doc_h > pageHeight) pageHeight = i.doc_h;
+    if (i.estPageH && i.estPageH > pageHeight) pageHeight = i.estPageH;
+  });
   const counts = {};
   items.forEach(i => {
-    const fy = Math.round((i.absY / pageHeight) * 1000);
+    let fy;
+    if (i.doc_h) {
+      fy = i.fy;
+    } else {
+      fy = Math.round((i.absY / pageHeight) * 1000);
+    }
     const k = i.fx + ',' + fy;
     counts[k] = (counts[k] || 0) + 1;
   });

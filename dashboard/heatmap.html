@@ -16,6 +16,12 @@
 .mode-btn:first-child { border-radius:4px 0 0 4px; }
 .mode-btn:last-child { border-radius:0 4px 4px 0; border-left:0; }
 .mode-btn.active { background:#4A90D9; color:#fff; border-color:#4A90D9; }
+.type-btn { padding:4px 10px; border:1px solid #ccc; background:#fff; cursor:pointer; font-size:12px; }
+.type-btn:first-child { border-radius:4px 0 0 4px; }
+.type-btn:last-child { border-radius:0 4px 4px 0; border-left:0; }
+.type-btn.active { background:#36b9cc; color:#fff; border-color:#36b9cc; }
+#legendBar { display:flex; align-items:center; gap:8px; margin-top:4px; font-size:11px; color:#888; }
+#legendGrad { height:12px; border-radius:3px; border:1px solid #ddd; flex:1; }
 </style>
 </head>
 <body>
@@ -32,27 +38,44 @@
     <select id="siteSelect" onchange="changeSite(this.value)" class="input"></select>
   </div>
   <h1>Heatmap</h1>
-  <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+  <div class="card" style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <label>Page :</label>
-    <select id="pageSelect" onchange="loadData()" class="input" style="width:400px"></select>
+    <select id="pageSelect" onchange="loadData()" class="input" style="width:380px"></select>
     <span id="dataCount" style="color:#888;font-size:13px"></span>
     <span style="margin-left:auto"></span>
+    <span id="typeBar">
+      <button class="type-btn active" data-type="all" onclick="setFilter('all')">Tout</button>
+      <button class="type-btn" data-type="click" onclick="setFilter('click')">Clics</button>
+      <button class="type-btn" data-type="move" onclick="setFilter('move')">Mouv</button>
+      <button class="type-btn" data-type="touch" onclick="setFilter('touch')">Touch</button>
+    </span>
     <span id="modeBar">
-      <button class="mode-btn active" data-mode="heat" onclick="switchMode('heat')">Clics+Mouvements</button>
+      <button class="mode-btn active" data-mode="heat" onclick="switchMode('heat')">C+M</button>
       <button class="mode-btn" data-mode="scroll" onclick="switchMode('scroll')">Scroll</button>
     </span>
+  </div>
+  <div class="card" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;">
+    <label style="font-size:12px;color:#888;">Rayon:</label>
+    <input type="range" id="radiusSlider" min="5" max="60" value="22" oninput="onRadiusChange(this.value)" style="flex:1;max-width:200px;">
+    <span id="radiusVal" style="font-size:12px;color:#888;">22</span>
   </div>
   <div id="heatmapWrap">
     <iframe id="heatmapFrame" sandbox="" loading="lazy"></iframe>
     <div id="heatmapOverlay"><div id="heatmapCanvas"></div><canvas id="scrollCanvas"></canvas></div>
     <div id="heatmapEmpty" style="display:none; padding:40px; text-align:center; color:#888;">Aucune donnée sur cette page.</div>
   </div>
-  <p style="margin-top:6px;font-size:12px;color:#999">Proxy page preview (sandbox, pas de JS).</p>
+  <div id="legendBar">
+    <span>Faible</span>
+    <canvas id="legendGrad" width="400" height="12"></canvas>
+    <span>Fort</span>
+  </div>
 </main>
 <script>
 let siteId = parseInt(localStorage.getItem('analytics_site_id')) || 1;
 let currentMode = 'heat';
+let currentType = 'all';
 let lastHeat = null, lastScroll = null;
+let radiusFactor = 22;
 
 function getToken() { return localStorage.getItem('token'); }
 function api(path) { return fetch(path, { headers: { 'Authorization': 'Bearer ' + getToken() }}); }
@@ -89,10 +112,22 @@ async function loadPages() {
   loadData();
 }
 
+function setFilter(type) {
+  currentType = type;
+  document.querySelectorAll('.type-btn').forEach(b => b.classList.toggle('active', b.dataset.type === type));
+  if (currentMode === 'heat') loadData();
+}
+
 function switchMode(mode) {
   currentMode = mode;
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   renderData();
+}
+
+function onRadiusChange(val) {
+  radiusFactor = parseInt(val);
+  document.getElementById('radiusVal').textContent = radiusFactor;
+  if (currentMode === 'heat' && lastHeat) renderHeat(lastHeat);
 }
 
 function loadData() {
@@ -101,8 +136,9 @@ function loadData() {
   document.getElementById('heatmapFrame').src = '/page-preview?url=' + encodeURIComponent(pageUrl);
   document.getElementById('heatmapEmpty').style.display = 'none';
   document.getElementById('dataCount').textContent = 'Chargement...';
-  api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json()).then(d => {
-    lastHeat = d; renderData();
+  var typeParam = currentType === 'all' ? '' : '&type=' + currentType;
+  api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl) + typeParam).then(r => r.json()).then(d => {
+    lastHeat = d; if (currentMode === 'heat') renderData();
   }).catch(e => console.error('heatmap API error:', e));
   api('/api/scroll-depth?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json()).then(d => {
     lastScroll = d; if (currentMode === 'scroll') renderData();
@@ -147,19 +183,20 @@ function renderHeat(res) {
     container.appendChild(canvas);
     var ctx = canvas.getContext('2d');
     ctx.globalCompositeOperation = 'lighter';
-    var radius = Math.max(15, w * 0.022);
+    var radius = Math.max(5, w * radiusFactor / 1000);
     var maxLog = Math.log(max + 1);
     data.forEach(function(d) {
       var cx = d.x * w, cy = d.y * h;
       var t = Math.log(d.count + 1) / maxLog;
+      var alpha = Math.min(0.85, 0.4 + t * 0.5);
       var r, g, b;
       if (t < 0.25) { r = 0; g = Math.round(255 * t * 4); b = 255; }
       else if (t < 0.5) { r = 0; g = 255; b = Math.round(255 * (1 - (t - 0.25) * 4)); }
       else if (t < 0.75) { r = Math.round(255 * (t - 0.5) * 4); g = 255; b = 0; }
       else { r = 255; g = Math.round(255 * (1 - (t - 0.75) * 4)); b = 0; }
       var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.8)');
-      grad.addColorStop(0.35, 'rgba(' + r + ',' + g + ',' + b + ',0.3)');
+      grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')');
+      grad.addColorStop(0.35, 'rgba(' + r + ',' + g + ',' + b + ',0.25)');
       grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
@@ -197,6 +234,22 @@ function renderScroll(res) {
     ctx.fillRect(0, y0, 80, Math.max(1, y1 - y0));
   });
 }
+
+// Draw color legend
+(function drawLegend() {
+  var c = document.getElementById('legendGrad');
+  var ctx = c.getContext('2d');
+  for (var i = 0; i < c.width; i++) {
+    var t = i / c.width;
+    var r, g, b;
+    if (t < 0.25) { r = 0; g = Math.round(255 * t * 4); b = 255; }
+    else if (t < 0.5) { r = 0; g = 255; b = Math.round(255 * (1 - (t - 0.25) * 4)); }
+    else if (t < 0.75) { r = Math.round(255 * (t - 0.5) * 4); g = 255; b = 0; }
+    else { r = 255; g = Math.round(255 * (1 - (t - 0.75) * 4)); b = 0; }
+    ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+    ctx.fillRect(i, 0, 1, c.height);
+  }
+})();
 
 loadSites();
 </script>

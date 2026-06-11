@@ -38,7 +38,10 @@ CREATE TABLE IF NOT EXISTS heatmap_events (
   viewport_w SMALLINT NOT NULL,
   viewport_h SMALLINT NOT NULL,
   scroll_y SMALLINT DEFAULT 0,
-  event_type VARCHAR(10) NOT NULL CHECK (event_type IN ('click','move','scroll')),
+  x_ratio REAL DEFAULT 0,
+  y_ratio REAL DEFAULT 0,
+  doc_height REAL DEFAULT 0,
+  event_type VARCHAR(10) NOT NULL CHECK (event_type IN ('click','move','touch','scroll')),
   session_id VARCHAR(36) NOT NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );

@@ -6,12 +6,19 @@ function hashIP(ip) {
   return crypto.createHash('sha256').update(ip + 'analytics-salt-2024').digest('hex').substring(0, 16);
 }
 
+// raw_events buffer
 let buffer = [];
 let bufferSize = 0;
 const FLUSH_THRESHOLD = 50;
 const FLUSH_INTERVAL = 5000;
 
+// heatmap_events buffer
+let heatBuffer = [];
+const HEAT_FLUSH_THRESHOLD = 20;
+const HEAT_FLUSH_INTERVAL = 3000;
+
 setInterval(() => flushBuffer(), FLUSH_INTERVAL);
+setInterval(() => flushHeatBuffer(), HEAT_FLUSH_INTERVAL);
 
 async function flushBuffer() {
   if (buffer.length === 0) return;
@@ -21,7 +28,6 @@ async function flushBuffer() {
     const supabase = db.getClient();
     const { error } = await supabase.from('raw_events').insert(batch);
     if (error) {
-      // Fallback: strip unknown columns (migration not yet run)
       const fallback = batch.map(r => ({
         site_id: r.site_id, api_key: r.api_key, page: r.page, referrer: r.referrer,
         ua: r.ua, ip_hash: r.ip_hash, country: r.country, city: r.city,
@@ -33,6 +39,18 @@ async function flushBuffer() {
     }
   } catch (err) {
     console.error('Flush error:', err.message);
+  }
+}
+
+async function flushHeatBuffer() {
+  if (heatBuffer.length === 0) return;
+  const batch = heatBuffer.splice(0);
+  try {
+    const supabase = db.getClient();
+    const { error } = await supabase.from('heatmap_events').insert(batch);
+    if (error) console.error('Heat flush error:', error.message);
+  } catch (err) {
+    console.error('Heat flush error:', err.message);
   }
 }
 
@@ -51,7 +69,7 @@ function classifyTraffic(referrer, utmSource, utmMedium) {
 }
 
 async function processEvent(req) {
-  const { site_id, url, referrer, screen_w, screen_h, session_id, event_type, started_at, utm_source, utm_medium, utm_campaign, x, y, viewport_w, viewport_h, scroll_y } = req.body;
+  const { site_id, url, referrer, screen_w, screen_h, session_id, event_type, started_at, utm_source, utm_medium, utm_campaign, x, y, x_ratio, y_ratio, doc_height, viewport_w, viewport_h, scroll_y } = req.body;
   if (!site_id || !session_id) return;
 
   const rawIp = req.headers['x-forwarded-for'] || req.ip || '0.0.0.0';
@@ -88,17 +106,18 @@ async function processEvent(req) {
     if (site) apiKey = site.api_key;
   } catch (e) {}
 
-  if (event_type === 'click' || event_type === 'move' || event_type === 'scroll') {
-    try {
-      await supabase.from('heatmap_events').insert({
-        site_id,
-        page_url: url || '/',
-        x: x || 0, y: y || 0,
-        viewport_w: viewport_w || 0, viewport_h: viewport_h || 0,
-        scroll_y: scroll_y || 0, event_type,
-        session_id,
-      });
-    } catch (e) {}
+  if (event_type === 'click' || event_type === 'move' || event_type === 'touch' || event_type === 'scroll') {
+    heatBuffer.push({
+      site_id,
+      page_url: url || '/',
+      x: x || 0, y: y || 0,
+      x_ratio: x_ratio || 0, y_ratio: y_ratio || 0,
+      doc_height: doc_height || 0,
+      viewport_w: viewport_w || 0, viewport_h: viewport_h || 0,
+      scroll_y: scroll_y || 0, event_type,
+      session_id,
+    });
+    if (heatBuffer.length >= HEAT_FLUSH_THRESHOLD || event_type === 'scroll') flushHeatBuffer();
   }
 
   buffer.push({
@@ -114,7 +133,11 @@ async function processEvent(req) {
 }
 
 async function collect(req, res) {
-  await processEvent(req);
+  const events = Array.isArray(req.body) ? req.body : [req.body];
+  for (const evt of events) {
+    req.body = evt;
+    await processEvent(req);
+  }
   res.json({ ok: true });
 }
 

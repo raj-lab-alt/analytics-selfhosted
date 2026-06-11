@@ -17,6 +17,12 @@
     sessionStorage.setItem('as_started', Date.now());
   }
 
+  var docHeight = Math.max(
+    document.documentElement.scrollHeight, document.body.scrollHeight,
+    document.documentElement.offsetHeight, document.body.offsetHeight,
+    document.documentElement.clientHeight, document.body.clientHeight
+  );
+
   function cleanUrl(u) {
     try { var p = new URL(u); var params = ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','utm_id','fbclid','gclid','gclsrc','msclkid']; var q = new URLSearchParams(p.search); params.forEach(function(k) { q.delete(k); }); var s = q.toString(); return s ? p.origin + p.pathname + '?' + s : p.origin + p.pathname; } catch(e) { return u; }
   }
@@ -39,23 +45,98 @@
     } catch (e) {}
   }
 
+  // Heatmap buffer & batch sender
+  var heatBuffer = [];
+  function flushHeat() {
+    if (heatBuffer.length === 0) return;
+    var batch = heatBuffer.splice(0);
+    try {
+      var blob = new Blob([JSON.stringify(batch)], { type: 'text/plain' });
+      if (!navigator.sendBeacon || !navigator.sendBeacon(apiUrl, blob)) {
+        fetch(apiUrl, { method: 'POST', body: blob, keepalive: true }).catch(function() {});
+      }
+    } catch(e) {}
+  }
+
+  function addHeatEvent(event_type, e) {
+    heatBuffer.push({
+      event_type: event_type,
+      x_ratio: e.clientX / (window.innerWidth || 1),
+      y_ratio: (e.clientY + window.scrollY) / (docHeight || 1),
+      doc_height: docHeight,
+      x: e.clientX, y: e.clientY,
+      viewport_w: window.innerWidth, viewport_h: window.innerHeight,
+      scroll_y: window.scrollY,
+      site_id: parseInt(siteId),
+      session_id: sessionId,
+      url: cleanUrl(window.location.href),
+      referrer: document.referrer || '',
+      ts: Date.now(),
+    });
+  }
+
   send({ event_type: 'pageview' });
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'hidden') send({ event_type: 'exit' });
+    if (document.visibilityState === 'hidden') {
+      flushHeat();
+      send({ event_type: 'exit' });
+    }
   });
   var heartbeatTimer = setInterval(function () { send({ event_type: 'heartbeat' }); }, 30000);
 
   if (heatmap) {
-    var moveTimer;
+    // Flush buffer every 2s
+    setInterval(flushHeat, 2000);
+
+    // Clicks: immediate (via buffer)
     document.addEventListener('click', function (e) {
-      send({ event_type: 'click', x: e.clientX, y: e.clientY, viewport_w: window.innerWidth, viewport_h: window.innerHeight, scroll_y: window.scrollY });
+      addHeatEvent('click', e);
     });
+
+    // Moves: rAF throttled (~100ms)
+    var movePending = false;
+    var lastMoveTs = 0;
     document.addEventListener('mousemove', function (e) {
-      clearTimeout(moveTimer);
-      moveTimer = setTimeout(function () {
-        send({ event_type: 'move', x: e.clientX, y: e.clientY, viewport_w: window.innerWidth, viewport_h: window.innerHeight, scroll_y: window.scrollY });
-      }, 250);
+      if (movePending) return;
+      var now = Date.now();
+      if (now - lastMoveTs < 100) return;
+      lastMoveTs = now;
+      movePending = true;
+      requestAnimationFrame(function () {
+        addHeatEvent('move', e);
+        movePending = false;
+      });
     });
+
+    // Touch: throttled similarly
+    var touchPending = false;
+    var lastTouchTs = 0;
+    document.addEventListener('touchstart', function (e) {
+      var t = e.touches[0];
+      if (!t) return;
+      var now = Date.now();
+      if (now - lastTouchTs < 100) return;
+      lastTouchTs = now;
+      touchPending = true;
+      requestAnimationFrame(function () {
+        addHeatEvent('touch', { clientX: t.clientX, clientY: t.clientY });
+        touchPending = false;
+      });
+    });
+    document.addEventListener('touchmove', function (e) {
+      var t = e.touches[0];
+      if (!t) return;
+      var now = Date.now();
+      if (now - lastTouchTs < 200) return;
+      lastTouchTs = now;
+      touchPending = true;
+      requestAnimationFrame(function () {
+        addHeatEvent('touch', { clientX: t.clientX, clientY: t.clientY });
+        touchPending = false;
+      });
+    });
+
+    // Scroll events (for pageHeight estimation, non-critical → immediate send, no buffer)
     document.addEventListener('scroll', function () {
       send({ event_type: 'scroll', x: 0, y: 0, viewport_w: window.innerWidth, viewport_h: window.innerHeight, scroll_y: window.scrollY });
     });
