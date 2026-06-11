@@ -88,6 +88,7 @@ app.get('/api/top-sources', dashboardApi.getTopSources);
 app.get('/api/realtime', dashboardApi.getRealtimeCount);
 app.get('/api/active-sessions', getActiveSessions);
 app.get('/api/heatmap', dashboardApi.getHeatmapData);
+app.get('/api/scroll-depth', dashboardApi.getScrollDepth);
 app.get('/api/visitor-locations', dashboardApi.getVisitorLocations);
 app.get('/api/top-cities', dashboardApi.getTopCities);
 app.get('/api/stats', dashboardApi.getStats);

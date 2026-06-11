@@ -290,4 +290,33 @@ async function getPlatforms(req, res) {
   res.json({ devices: devicePct, browsers: browserPct, os: osPct });
 }
 
-module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources, getPlatforms };
+async function getScrollDepth(req, res) {
+  const siteId = req.query.site_id || 1;
+  const rawPage = req.query.page || '/';
+  const supabase = db.getClient();
+  let path = rawPage;
+  try { const u = new URL(rawPage); path = u.origin + u.pathname; } catch(e) {}
+  const escaped = path.replace(/[%_]/g, '\\$&');
+  const { data } = await supabase
+    .from('heatmap_events')
+    .select('scroll_y, viewport_h, session_id')
+    .eq('site_id', siteId)
+    .like('page_url', escaped + '%');
+  const sessionDepths = {};
+  (data || []).forEach(e => {
+    const depth = (e.scroll_y || 0) + (e.viewport_h || 1080);
+    const sid = e.session_id;
+    if (!sessionDepths[sid] || depth > sessionDepths[sid]) sessionDepths[sid] = depth;
+  });
+  const depths = Object.values(sessionDepths);
+  const pageHeight = depths.length ? Math.max(...depths, 800) : 800;
+  const total = depths.length;
+  const step = 50;
+  const rows = [];
+  for (let y = 0; y <= pageHeight; y += step) {
+    rows.push({ y: y / pageHeight, visibility: depths.filter(d => d >= y).length / total });
+  }
+  res.json({ pageHeight, rows, total });
+}
+
+module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getScrollDepth, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources, getPlatforms };
