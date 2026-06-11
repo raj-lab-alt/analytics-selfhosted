@@ -54,7 +54,7 @@ let currentMode = 'heat';
 let lastData = null;
 
 function getToken() { return localStorage.getItem('token'); }
-function api(path) { return fetch(path, { headers: { 'Authorization': 'Bearer ' + getToken() }}); }
+function api(path) { return fetch(path, { headers: { 'Authorization': 'Bearer ' + getToken() }}).then(r => { if (r.status === 401) { localStorage.removeItem('token'); window.location.href = '/login.html'; } return r; }); }
 
 async function loadSites() {
   const r = await api('/api/sites');
