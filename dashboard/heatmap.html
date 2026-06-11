@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heatmap - Analytics</title>
+<link rel="stylesheet" href="/assets/dashboard.css">
+<script src="https://cdn.jsdelivr.net/npm/heatmapjs@2.0.2/build/heatmap.min.js"></script>
+<style>#heatmapCanvas { width: 100%; height: 800px; border: 1px solid #ccc; position: relative; background: #fafafa; }</style>
+</head>
+<body>
+<nav class="nav">
+  <a href="/">Overview</a>
+  <a href="/realtime.html">Realtime</a>
+  <a href="/heatmap.html" class="active">Heatmap</a>
+  <a href="/login.html" class="logout">Logout</a>
+</nav>
+<main class="container">
+  <h1>Click Heatmap</h1>
+  <div class="card">
+    <label>Page URL:</label>
+    <input type="text" id="pageUrl" value="/" class="input">
+    <button onclick="loadHeatmap()" class="btn">Load</button>
+  </div>
+  <div id="heatmapCanvas"></div>
+</main>
+<script>
+const siteId = 1;
+function loadHeatmap() {
+  const pageUrl = document.getElementById('pageUrl').value;
+  fetch('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl), { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }})
+    .then(r => r.json()).then(data => {
+      const container = document.getElementById('heatmapCanvas');
+      container.innerHTML = '';
+      const w = container.offsetWidth || 1200;
+      const h = 800;
+      var heat = h337.create({ container, radius: 25, blur: .85 });
+      var max = 0;
+      data.forEach(d => { if (d.count > max) max = d.count; });
+      var points = data.map(d => ({ x: Math.round(d.x * w / 1920), y: Math.round(d.y * h / 1080), value: d.count }));
+      heat.setData({ max: max || 1, data: points });
+    });
+}
+loadHeatmap();
+</script>
+</body>
+</html>

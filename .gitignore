@@ -1,0 +1,6 @@
+node_modules/
+.env
+*.local.js
+geolite2.mmdb
+.DS_Store
+/vscode/

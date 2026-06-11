@@ -1,0 +1,68 @@
+require('dotenv').config();
+const express = require('express');
+const http = require('http');
+const { WebSocketServer } = require('ws');
+const path = require('path');
+
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
+
+app.use(express.json({ limit: '50kb' }));
+app.use(express.static(path.join(__dirname, 'dashboard')));
+
+app.use((req, res, next) => {
+  const auth = req.headers['authorization'];
+  if (req.path.startsWith('/dashboard') || req.path.startsWith('/api/')) {
+    if (!auth || auth !== 'Bearer ' + (process.env.ADMIN_PASSWORD || 'admin123')) {
+      if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'unauthorized' });
+      return res.redirect('/login.html');
+    }
+  }
+  next();
+});
+
+const db = require('./src/db');
+const { collect } = require('./src/collect');
+const { setupWebSocket, getActiveSessions } = require('./src/realtime');
+const { aggregateHourly, aggregateDaily, cleanup } = require('./src/aggregate');
+const dashboardApi = require('./src/dashboard-api');
+
+app.post('/collect', collect);
+
+app.get('/api/overview', dashboardApi.getOverview);
+app.get('/api/top-pages', dashboardApi.getTopPages);
+app.get('/api/top-sources', dashboardApi.getTopSources);
+app.get('/api/realtime', dashboardApi.getRealtimeCount);
+app.get('/api/active-sessions', getActiveSessions);
+app.get('/api/heatmap', dashboardApi.getHeatmapData);
+
+app.get('/tracker.js', (req, res) => {
+  res.sendFile(path.join(__dirname, 'tracker.js'));
+});
+
+app.get('/install', async (req, res) => {
+  if (req.query.key !== (process.env.ADMIN_PASSWORD || 'admin123')) return res.status(403).send('forbidden');
+  const fs = require('fs');
+  const sql = fs.readFileSync(path.join(__dirname, 'install.sql'), 'utf8');
+  const statements = sql.split(';').filter(s => s.trim());
+  try {
+    for (const stmt of statements) await db.query(stmt);
+    res.send('Tables created successfully');
+  } catch (err) {
+    res.status(500).send(err.message);
+  }
+});
+
+setupWebSocket(wss);
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Analytics server running on port ${PORT}`);
+});
+
+setInterval(() => aggregateHourly(), 3600000);
+setInterval(() => aggregateDaily(), 86400000);
+setInterval(() => cleanup(), 3600000);
+
+module.exports = { app, server };

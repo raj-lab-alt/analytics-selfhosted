@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Realtime - Analytics</title>
+<link rel="stylesheet" href="/assets/dashboard.css">
+</head>
+<body>
+<nav class="nav">
+  <a href="/">Overview</a>
+  <a href="/realtime.html" class="active">Realtime</a>
+  <a href="/heatmap.html">Heatmap</a>
+  <a href="/login.html" class="logout">Logout</a>
+</nav>
+<main class="container">
+  <h1>Realtime Visitors</h1>
+  <div class="stats-grid">
+    <div class="stat-card highlight"><h3>Active Now</h3><p id="activeCount">0</p></div>
+    <div class="stat-card"><h3>Today</h3><p id="todayCount">0</p></div>
+  </div>
+  <div class="card">
+    <h2>Live Sessions</h2>
+    <table id="sessionsTable">
+      <thead><tr><th>Page</th><th>Referrer</th><th>Country</th><th>Last Ping</th></tr></thead>
+      <tbody id="sessionsBody"></tbody>
+    </table>
+  </div>
+</main>
+<script>
+const siteId = 1;
+const ws = new WebSocket('ws://' + location.host + '/ws?site_id=' + siteId);
+ws.onmessage = function(e) {
+  const data = JSON.parse(e.data);
+  document.getElementById('activeCount').textContent = data.active;
+};
+
+function fetchSessions() {
+  fetch('/api/active-sessions?site_id=' + siteId, { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }})
+    .then(r => r.json()).then(data => {
+      document.getElementById('activeCount').textContent = data.total;
+      document.getElementById('todayCount').textContent = data.total;
+      document.getElementById('sessionsBody').innerHTML = data.sessions.map(s =>
+        '<tr><td>' + esc(s.page) + '</td><td>' + esc(s.referrer) + '</td><td>' + esc(s.country) + '</td><td>' + new Date(s.last_ping).toLocaleTimeString() + '</td></tr>'
+      ).join('');
+    });
+}
+fetchSessions();
+setInterval(fetchSessions, 10000);
+function esc(s) { return s || '-'; }
+</script>
+</body>
+</html>
