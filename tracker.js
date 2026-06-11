@@ -48,7 +48,16 @@
 
   function getCtaName(el) {
     var cta = el.closest ? el.closest('[data-heatmap-cta]') : null;
-    return cta ? cta.getAttribute('data-heatmap-cta') : null;
+    if (cta) return cta.getAttribute('data-heatmap-cta');
+    if (isClickable(el)) {
+      var text = (el.innerText || el.value || '').trim().slice(0, 40);
+      if (text) return text;
+      if (el.id) return '#' + el.id;
+      var href = el.getAttribute ? el.getAttribute('href') : null;
+      if (href && href !== '#') return href;
+      return el.tagName ? el.tagName.toLowerCase() : 'clickable';
+    }
+    return null;
   }
 
   function isClickable(el) {

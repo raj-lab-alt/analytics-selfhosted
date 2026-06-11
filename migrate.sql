@@ -12,7 +12,7 @@ ALTER TABLE raw_events ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(200) DEFAUL
 ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS x_ratio REAL DEFAULT 0;
 ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS y_ratio REAL DEFAULT 0;
 ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS doc_height REAL DEFAULT 0;
-ALTER TABLE heatmap_events ALTER COLUMN event_type DROP CONSTRAINT IF EXISTS heatmap_events_event_type_check;
+ALTER TABLE heatmap_events DROP CONSTRAINT IF EXISTS heatmap_events_event_type_check;
 ALTER TABLE heatmap_events ADD CONSTRAINT heatmap_events_event_type_check CHECK (event_type IN ('click','move','touch','scroll'));
 
 CREATE TABLE IF NOT EXISTS heatmap_clicks (
