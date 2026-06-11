@@ -44,7 +44,7 @@ app.get('/page-preview', (req, res) => {
       let html = '';
       proxyRes.on('data', chunk => html += chunk);
       proxyRes.on('end', () => {
-        html = html.replace('<head>', `<head><base href="${parsed.origin}">`);
+        html = html.replace('<head>', `<head><base href="${parsed.origin}"><style>html,body{overflow:hidden !important;height:100% !important;margin:0;}</style>`);
         res.set('Content-Type', 'text/html');
         res.send(html);
       });

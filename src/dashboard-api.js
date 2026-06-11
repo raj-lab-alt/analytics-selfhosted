@@ -98,22 +98,29 @@ async function getHeatmapData(req, res) {
   const escaped = path.replace(/[%_]/g, '\\$&');
   const { data } = await supabase
     .from('heatmap_events')
-    .select('x, y, viewport_w, viewport_h')
+    .select('x, y, viewport_w, viewport_h, scroll_y')
     .eq('site_id', siteId)
     .like('page_url', escaped + '%')
     .in('event_type', ['click', 'move']);
+  const items = (data || []).map(e => {
+    const vw = e.viewport_w || 1920, vh = e.viewport_h || 1080, sy = e.scroll_y || 0;
+    const absY = e.y + sy;
+    const estPageH = sy + vh;
+    return { fx: Math.round((e.x / vw) * 1000), absY, estPageH };
+  });
+  let pageHeight = 800;
+  items.forEach(i => { if (i.estPageH > pageHeight) pageHeight = i.estPageH; });
   const counts = {};
-  (data || []).forEach(e => {
-    const vw = e.viewport_w || 1920, vh = e.viewport_h || 1080;
-    const fx = Math.round((e.x / vw) * 1000), fy = Math.round((e.y / vh) * 1000);
-    const k = fx + ',' + fy;
+  items.forEach(i => {
+    const fy = Math.round((i.absY / pageHeight) * 1000);
+    const k = i.fx + ',' + fy;
     counts[k] = (counts[k] || 0) + 1;
   });
-  const result = Object.entries(counts).map(([k, count]) => {
+  const points = Object.entries(counts).map(([k, count]) => {
     const [fx, fy] = k.split(',').map(Number);
     return { x: fx / 1000, y: fy / 1000, count };
   });
-  res.json(result);
+  res.json({ points, pageHeight });
 }
 
 async function getVisitorLocations(req, res) {
