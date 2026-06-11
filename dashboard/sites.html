@@ -47,7 +47,11 @@ async function loadSites() {
       <td>${esc(s.name)}</td>
       <td>${esc(s.domain)}</td>
       <td><code>${esc(s.api_key)}</code></td>
-      <td><code>&lt;script src="https://analytics.curtexrm.com/tracker.js" data-site="${s.id}" data-api="https://analytics.curtexrm.com/collect" defer&gt;&lt;/script&gt;</code></td>
+      <td>
+        <code onclick="copy(this)" title="Cliquer pour copier">&lt;script src="https://analytics.curtexrm.com/p.js" data-site="${s.id}" defer&gt;&lt;/script&gt;</code>
+        <br><small style="color:#888">avec heatmap :</small>
+        <code onclick="copy(this)" title="Cliquer pour copier">&lt;script src="https://analytics.curtexrm.com/p.js" data-site="${s.id}" data-heatmap="true" defer&gt;&lt;/script&gt;</code>
+      </td>
     </tr>
   `).join('');
 }
@@ -64,6 +68,7 @@ async function addSite() {
 }
 
 function esc(s) { return s || '-'; }
+function copy(el) { navigator.clipboard.writeText(el.textContent).then(function() { var t = el.title; el.title = 'Copié!'; setTimeout(function() { el.title = t; }, 1500); }); }
 loadSites();
 </script>
 </body>
