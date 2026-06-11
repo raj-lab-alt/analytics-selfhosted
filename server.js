@@ -85,7 +85,7 @@ app.use((req, res, next) => {
 const db = require('./src/db');
 const { collect, processEvent } = require('./src/collect');
 const { setupWebSocket, getActiveSessions } = require('./src/realtime');
-const { aggregateHourly, aggregateDaily, cleanup } = require('./src/aggregate');
+const { aggregateHourly, aggregateDaily, cleanup, cleanupStaleSessions } = require('./src/aggregate');
 const dashboardApi = require('./src/dashboard-api');
 
 app.post('/collect', collect);
@@ -158,9 +158,11 @@ setupWebSocket(wss);
 // Run aggregation on startup then periodically
 aggregateDaily();
 aggregateHourly();
+cleanupStaleSessions();
 setInterval(() => aggregateHourly(), 3600000);
 setInterval(() => aggregateDaily(), 86400000);
 setInterval(() => cleanup(), 3600000);
+setInterval(() => cleanupStaleSessions(), 300000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

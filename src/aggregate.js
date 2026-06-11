@@ -150,10 +150,16 @@ async function cleanup() {
     const supabase = db.getClient();
     const oldRaw = new Date(Date.now() - 90 * 86400000).toISOString();
     const oldHeat = new Date(Date.now() - 30 * 86400000).toISOString();
-    const oldSession = new Date(Date.now() - 3600000).toISOString();
     await supabase.from('raw_events').delete().lt('created_at', oldRaw);
     await supabase.from('heatmap_events').delete().lt('created_at', oldHeat);
-    await supabase.from('active_sessions').delete().lt('last_ping', oldSession);
+  } catch (e) {}
+}
+
+async function cleanupStaleSessions() {
+  try {
+    const supabase = db.getClient();
+    const stale = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    await supabase.from('active_sessions').delete().lt('last_ping', stale);
   } catch (e) {}
 }
 
