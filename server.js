@@ -49,6 +49,7 @@ const { aggregateHourly, aggregateDaily, cleanup } = require('./src/aggregate');
 const dashboardApi = require('./src/dashboard-api');
 
 app.post('/collect', collect);
+app.get('/ping', (req, res) => res.json({ pong: true }));
 app.get('/dbg', async (req, res) => { try { const s = db.getClient(); const { data, error } = await s.from('active_sessions').insert({ session_id: 'dbg-' + Date.now(), site_id: 2, page: '/dbg', ua: 'test', last_ping: new Date().toISOString() }).select(); res.json({ ok: !error, data, error: error?.message }); } catch(e) { res.json({ ok: false, error: e.message }); } });
 
 app.get('/api/overview', dashboardApi.getOverview);
