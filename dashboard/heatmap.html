@@ -116,26 +116,30 @@ function renderData() {
 }
 
 function renderHeat(res) {
-  const data = res.points || res;
-  const pageH = res.pageHeight || 800;
-  document.getElementById('dataCount').textContent = data.length + ' points';
-  const container = document.getElementById('heatmapCanvas');
-  container.innerHTML = '';
-  if (data.length === 0) { document.getElementById('heatmapEmpty').style.display = ''; return; }
-  document.getElementById('heatmapEmpty').style.display = 'none';
-  const wrap = document.getElementById('heatmapWrap');
-  const overlay = document.getElementById('heatmapOverlay');
-  const frame = document.getElementById('heatmapFrame');
-  const w = container.offsetWidth || 1200;
-  const h = Math.round(pageH * w / 1200);
-  wrap.style.height = h + 'px';
-  overlay.style.height = h + 'px';
-  frame.style.height = h + 'px';
-  container.style.height = h + 'px';
-  var heat = h337.create({ container, radius: 20, blur: .85 });
-  var max = 0;
-  data.forEach(d => { if (d.count > max) max = d.count; });
-  heat.setData({ max: max || 1, data: data.map(d => ({ x: Math.round(d.x * w), y: Math.round(d.y * h), value: d.count })) });
+  try {
+    const data = res.points || res;
+    const pageH = res.pageHeight || 800;
+    document.getElementById('dataCount').textContent = data.length + ' points';
+    const container = document.getElementById('heatmapCanvas');
+    container.innerHTML = '';
+    if (data.length === 0) { document.getElementById('heatmapEmpty').style.display = ''; return; }
+    document.getElementById('heatmapEmpty').style.display = 'none';
+    const wrap = document.getElementById('heatmapWrap');
+    const overlay = document.getElementById('heatmapOverlay');
+    const frame = document.getElementById('heatmapFrame');
+    const w = container.offsetWidth || 1200;
+    const h = Math.round(pageH * w / 1200);
+    wrap.style.height = h + 'px';
+    overlay.style.height = h + 'px';
+    frame.style.height = h + 'px';
+    container.style.height = h + 'px';
+    void container.offsetHeight;
+    if (typeof h337 === 'undefined') { console.error('h337 not loaded'); document.getElementById('dataCount').textContent = 'Erreur: librairie heatmap non chargée'; return; }
+    var heat = h337.create({ container, radius: 20, blur: .85 });
+    var max = 0;
+    data.forEach(d => { if (d.count > max) max = d.count; });
+    heat.setData({ max: max || 1, data: data.map(d => ({ x: Math.round(d.x * w), y: Math.round(d.y * h), value: d.count })) });
+  } catch(e) { console.error('renderHeat error:', e); document.getElementById('dataCount').textContent = 'Erreur: ' + e.message; }
 }
 
 function renderScroll(res) {
