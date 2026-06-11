@@ -43,12 +43,19 @@ app.use((req, res, next) => {
 });
 
 const db = require('./src/db');
-const { collect } = require('./src/collect');
+const { collect, processEvent } = require('./src/collect');
 const { setupWebSocket, getActiveSessions } = require('./src/realtime');
 const { aggregateHourly, aggregateDaily, cleanup } = require('./src/aggregate');
 const dashboardApi = require('./src/dashboard-api');
 
 app.post('/collect', collect);
+app.get('/collect', async (req, res) => {
+  req.body = req.query;
+  await processEvent(req);
+  res.set('Content-Type', 'image/gif');
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64'));
+});
 app.get('/ping', (req, res) => res.json({ pong: true }));
 app.get('/dbg', async (req, res) => { try { const s = db.getClient(); const { data, error } = await s.from('active_sessions').insert({ session_id: 'dbg-' + Date.now(), site_id: 2, page: '/dbg', ua: 'test', last_ping: new Date().toISOString() }).select(); res.json({ ok: !error, data, error: error?.message }); } catch(e) { res.json({ ok: false, error: e.message }); } });
 
@@ -65,7 +72,8 @@ app.get('/api/traffic-sources', dashboardApi.getTrafficSources);
 app.get('/api/sites', dashboardApi.getSites);
 app.post('/api/sites', dashboardApi.createSite);
 
-app.get('/tracker.js', (req, res) => {
+// Tracker script served at multiple paths to evade adblockers
+app.get(['/tracker.js', '/p.js', '/stat.js', '/a.js'], (req, res) => {
   res.sendFile(path.join(__dirname, 'tracker.js'));
 });
 

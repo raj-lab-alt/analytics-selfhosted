@@ -32,19 +32,17 @@
     data.screen_h = screen.height;
     data.ts = Date.now();
     try {
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(apiUrl, new Blob([JSON.stringify(data)], { type: 'text/plain' }));
-      } else {
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', apiUrl, true);
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.send(JSON.stringify(data));
+      var blob = new Blob([JSON.stringify(data)], { type: 'text/plain' });
+      if (!navigator.sendBeacon || !navigator.sendBeacon(apiUrl, blob)) {
+        fetch(apiUrl, { method: 'POST', body: blob, keepalive: true }).catch(function() {});
       }
     } catch (e) {}
   }
 
   send({ event_type: 'pageview' });
-  window.addEventListener('beforeunload', function () { send({ event_type: 'exit' }); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') send({ event_type: 'exit' });
+  });
   var heartbeatTimer = setInterval(function () { send({ event_type: 'heartbeat' }); }, 30000);
 
   if (heatmap) {

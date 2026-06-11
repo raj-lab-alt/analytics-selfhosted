@@ -48,9 +48,9 @@ function classifyTraffic(referrer, utmSource, utmMedium) {
   return 'referral';
 }
 
-async function collect(req, res) {
+async function processEvent(req) {
   const { site_id, url, referrer, screen_w, screen_h, session_id, event_type, started_at, utm_source, utm_medium, utm_campaign, x, y, viewport_w, viewport_h, scroll_y } = req.body;
-  if (!site_id || !session_id) return res.json({ ok: false, error: 'missing fields' });
+  if (!site_id || !session_id) return;
 
   const rawIp = req.headers['x-forwarded-for'] || req.ip || '0.0.0.0';
   const ip = rawIp.split(',')[0].trim();
@@ -108,8 +108,11 @@ async function collect(req, res) {
   });
   bufferSize++;
   if (bufferSize >= FLUSH_THRESHOLD || event_type === 'exit') flushBuffer();
+}
 
+async function collect(req, res) {
+  await processEvent(req);
   res.json({ ok: true });
 }
 
-module.exports = { collect };
+module.exports = { collect, processEvent };
