@@ -12,7 +12,7 @@ tracker.js           → Script client à embarquer sur les sites
 install.sql          → Schema PostgreSQL
 db.js                → Client Supabase (validation Hostinger)
 src/
-  db.js              → Pool PostgreSQL (pg) avec support Supabase env vars
+  db.js              → Client Supabase REST API (via @supabase/supabase-js)
   collect.js         → POST /collect (buffer batch insert)
   realtime.js        → WebSocket + REST endpoint sessions actives
   aggregate.js       → Agrégation horaire/journalière + nettoyage
