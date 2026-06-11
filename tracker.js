@@ -1,7 +1,12 @@
 (function () {
-  var script = document.currentScript;
-  var siteId = script && script.getAttribute('data-site');
-  var heatmap = script && script.getAttribute('data-heatmap') === 'true';
+  var scripts = document.getElementsByTagName('script');
+  var script;
+  for (var i = 0; i < scripts.length; i++) {
+    if (scripts[i].src && scripts[i].src.indexOf('/tracker.js') > -1) { script = scripts[i]; break; }
+  }
+  if (!script) return;
+  var siteId = script.getAttribute('data-site');
+  var heatmap = script.getAttribute('data-heatmap') === 'true';
   if (!siteId) return;
 
   var apiUrl = script.getAttribute('data-api') || script.src.replace('/tracker.js', '/collect');
