@@ -146,16 +146,20 @@ function renderHeat(res) {
     canvas.style.left = '0';
     container.appendChild(canvas);
     var ctx = canvas.getContext('2d');
-    var radius = 30;
+    ctx.globalCompositeOperation = 'lighter';
+    var radius = Math.max(15, w * 0.022);
+    var maxLog = Math.log(max + 1);
     data.forEach(function(d) {
       var cx = d.x * w, cy = d.y * h;
-      var intensity = d.count / max;
+      var t = Math.log(d.count + 1) / maxLog;
+      var r, g, b;
+      if (t < 0.25) { r = 0; g = Math.round(255 * t * 4); b = 255; }
+      else if (t < 0.5) { r = 0; g = 255; b = Math.round(255 * (1 - (t - 0.25) * 4)); }
+      else if (t < 0.75) { r = Math.round(255 * (t - 0.5) * 4); g = 255; b = 0; }
+      else { r = 255; g = Math.round(255 * (1 - (t - 0.75) * 4)); b = 0; }
       var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      var r = Math.round(255 * intensity);
-      var g = Math.round(80 * (1 - intensity));
-      var b = Math.round(50 * (1 - intensity));
-      grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.7)');
-      grad.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.3)');
+      grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.8)');
+      grad.addColorStop(0.35, 'rgba(' + r + ',' + g + ',' + b + ',0.3)');
       grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
