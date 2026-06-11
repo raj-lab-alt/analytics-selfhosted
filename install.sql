@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS active_sessions (
   lat REAL DEFAULT 0,
   lon REAL DEFAULT 0,
   ua TEXT,
+  started_at TIMESTAMP DEFAULT NOW(),
   last_ping TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_active_site ON active_sessions (site_id);

@@ -26,6 +26,8 @@
   <div class="stats-grid">
     <div class="stat-card highlight"><h3>Active Now</h3><p id="activeCount">0</p></div>
     <div class="stat-card"><h3>Today</h3><p id="todayCount">0</p></div>
+    <div class="stat-card"><h3>Avg Visit</h3><p id="avgVisit">0s</p></div>
+    <div class="stat-card"><h3>Top City</h3><p id="topCity">-</p></div>
   </div>
   <div id="map"></div>
   <div class="card">
@@ -101,6 +103,13 @@ document.addEventListener('DOMContentLoaded', function() {
   connectWS();
   fetchAll();
   setInterval(fetchAll, 10000);
+
+  api('/api/stats?site_id=' + siteId + '&days=1').then(r => r.json()).then(function(s) {
+    document.getElementById('avgVisit').textContent = s.avgDuration + 's';
+  });
+  api('/api/top-cities?site_id=' + siteId + '&days=1').then(r => r.json()).then(function(c) {
+    document.getElementById('topCity').textContent = c[0] ? c[0].location : '-';
+  });
 });
 </script>
 </body>

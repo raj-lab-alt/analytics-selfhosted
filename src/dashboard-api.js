@@ -136,4 +136,64 @@ async function createSite(req, res) {
   res.json(data[0]);
 }
 
-module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getVisitorLocations, getSites, createSite };
+async function getTopCities(req, res) {
+  const siteId = req.query.site_id || 1;
+  const days = parseInt(req.query.days) || 7;
+  const supabase = db.getClient();
+  const startDate = new Date(Date.now() - days * 86400000).toISOString();
+  const { data } = await supabase
+    .from('raw_events')
+    .select('country, city')
+    .eq('site_id', siteId)
+    .neq('country', '')
+    .gte('created_at', startDate);
+  const counts = {};
+  (data || []).forEach(e => {
+    const key = (e.city || '') + ', ' + (e.country || '');
+    counts[key] = (counts[key] || 0) + 1;
+  });
+  const result = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([location, count]) => ({ location, count }));
+  res.json(result);
+}
+
+async function getStats(req, res) {
+  const siteId = req.query.site_id || 1;
+  const days = parseInt(req.query.days) || 7;
+  const supabase = db.getClient();
+  const startDate = new Date(Date.now() - days * 86400000).toISOString();
+
+  const { data: sessions } = await supabase
+    .from('active_sessions')
+    .select('started_at, last_ping')
+    .eq('site_id', siteId)
+    .gte('last_ping', startDate);
+
+  let avgDuration = 0;
+  if (sessions && sessions.length > 0) {
+    const totalMs = sessions.reduce((sum, s) => {
+      const start = new Date(s.started_at || s.last_ping).getTime();
+      const end = new Date(s.last_ping).getTime();
+      return sum + Math.max(0, end - start);
+    }, 0);
+    avgDuration = Math.round(totalMs / sessions.length / 1000);
+  }
+
+  // Referrer breakdown
+  const { data: referrers } = await supabase
+    .from('raw_events')
+    .select('referrer')
+    .eq('site_id', siteId)
+    .eq('event_type', 'pageview')
+    .neq('referrer', '')
+    .gte('created_at', startDate);
+  const refCounts = {};
+  (referrers || []).forEach(e => {
+    const ref = e.referrer || '(direct)';
+    refCounts[ref] = (refCounts[ref] || 0) + 1;
+  });
+  const topReferrers = Object.entries(refCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([referrer, count]) => ({ referrer, count }));
+
+  res.json({ avgDuration, topReferrers });
+}
+
+module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getVisitorLocations, getSites, createSite, getTopCities, getStats };

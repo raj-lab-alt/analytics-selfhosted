@@ -27,7 +27,7 @@ async function flushBuffer() {
 }
 
 async function collect(req, res) {
-  const { site_id, url, referrer, screen_w, screen_h, session_id, event_type, x, y, viewport_w, viewport_h, scroll_y } = req.body;
+  const { site_id, url, referrer, screen_w, screen_h, session_id, event_type, started_at, x, y, viewport_w, viewport_h, scroll_y } = req.body;
   if (!site_id || !session_id) return res.json({ ok: false, error: 'missing fields' });
 
   const rawIp = req.headers['x-forwarded-for'] || req.ip || '0.0.0.0';
@@ -36,6 +36,8 @@ async function collect(req, res) {
   const ipHash = hashIP(ip);
 
   const geo = await geoip.lookup(ip);
+  const now = new Date().toISOString();
+  const sessionStarted = started_at ? new Date(parseInt(started_at)).toISOString() : now;
 
   const supabase = db.getClient();
 
@@ -50,7 +52,8 @@ async function collect(req, res) {
       lat: geo.lat,
       lon: geo.lon,
       ua,
-      last_ping: new Date().toISOString(),
+      started_at: sessionStarted,
+      last_ping: now,
     }, { onConflict: 'session_id' });
   } catch (e) {}
 
@@ -77,10 +80,10 @@ async function collect(req, res) {
     site_id, api_key: apiKey, page: url || '/', referrer: referrer || '', ua, ip_hash: ipHash,
     country: geo.country, city: geo.city,
     screen_w: screen_w || 0, screen_h: screen_h || 0,
-    session_id, event_type: event_type || 'pageview', created_at: new Date().toISOString(),
+    session_id, event_type: event_type || 'pageview', created_at: now,
   });
   bufferSize++;
-  if (bufferSize >= FLUSH_THRESHOLD) flushBuffer();
+  if (bufferSize >= FLUSH_THRESHOLD || event_type === 'exit') flushBuffer();
 
   res.json({ ok: true });
 }

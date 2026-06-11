@@ -47,6 +47,12 @@ async function loadOverview(days) {
   const total30 = overview.slice(-30).reduce((s, r) => s + r.pages_vues, 0);
   document.getElementById('monthViews').textContent = total30;
 
+  const stats = await (await api('/api/stats?site_id=' + siteId + '&days=' + days)).json();
+  document.getElementById('avgVisit').textContent = stats.avgDuration + 's';
+
+  const topCities = await (await api('/api/top-cities?site_id=' + siteId + '&days=' + days)).json();
+  document.getElementById('topCity').textContent = topCities[0] ? topCities[0].location : '-';
+
   const topPages = await (await api('/api/top-pages?site_id=' + siteId + '&days=' + days)).json();
   document.getElementById('topPages').innerHTML =
     '<table><thead><tr><th>Page</th><th>Views</th></tr></thead><tbody>' +

@@ -14,6 +14,7 @@
   if (!sessionId) {
     sessionId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2) + Date.now().toString(36);
     sessionStorage.setItem('as_sid', sessionId);
+    sessionStorage.setItem('as_started', Date.now());
   }
 
   function cleanUrl(u) {
@@ -23,6 +24,7 @@
   function send(data) {
     data.site_id = parseInt(siteId);
     data.session_id = sessionId;
+    data.started_at = parseInt(sessionStorage.getItem('as_started')) || Date.now();
     data.url = cleanUrl(window.location.href);
     data.referrer = document.referrer || '';
     data.screen_w = screen.width;
@@ -41,6 +43,8 @@
   }
 
   send({ event_type: 'pageview' });
+  window.addEventListener('beforeunload', function () { send({ event_type: 'exit' }); });
+  var heartbeatTimer = setInterval(function () { send({ event_type: 'heartbeat' }); }, 30000);
 
   if (heatmap) {
     var moveTimer;
