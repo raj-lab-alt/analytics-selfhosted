@@ -8,7 +8,7 @@ function buildConnectionString() {
   }
   if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     const host = new URL(process.env.SUPABASE_URL).hostname;
-    return `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_SERVICE_ROLE_KEY)}@${host}:5432/postgres`;
+    return `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_SERVICE_ROLE_KEY)}@${host}:6543/postgres?pgbouncer=true`;
   }
   return `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || ''}@${process.env.DB_HOST || 'localhost'}:5432/${process.env.DB_NAME || 'analytics'}`;
 }
