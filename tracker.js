@@ -26,7 +26,7 @@
     data.ts = Date.now();
     try {
       if (navigator.sendBeacon) {
-        navigator.sendBeacon(apiUrl, new Blob([JSON.stringify(data)], { type: 'application/json' }));
+        navigator.sendBeacon(apiUrl, new Blob([JSON.stringify(data)], { type: 'text/plain' }));
       } else {
         var xhr = new XMLHttpRequest();
         xhr.open('POST', apiUrl, true);
