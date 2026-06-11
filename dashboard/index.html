@@ -12,9 +12,13 @@
   <a href="/">Overview</a>
   <a href="/realtime.html">Realtime</a>
   <a href="/heatmap.html">Heatmap</a>
+  <a href="/sites.html">Sites</a>
   <a href="/login.html" class="logout">Logout</a>
 </nav>
 <main class="container">
+  <div class="site-selector" style="margin-bottom:16px">
+    <select id="siteSelect" onchange="changeSite(this.value)" class="input"></select>
+  </div>
   <div class="stats-grid">
     <div class="stat-card"><h3>Active</h3><p id="activeCount">0</p></div>
     <div class="stat-card"><h3>Today</h3><p id="todayViews">0</p></div>

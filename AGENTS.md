@@ -22,6 +22,7 @@ dashboard/
   index.html         → Overview avec graphiques Chart.js
   realtime.html      → Temps réel (WebSocket + polling)
   heatmap.html       → Visualiseur heatmap
+  sites.html         → Gérer les sites trackés
   assets/
     dashboard.css
     dashboard.js
@@ -57,6 +58,8 @@ Sans heatmap :
 - `GET /api/realtime?site_id=1` → Compteur actif
 - `GET /api/active-sessions?site_id=1` → Sessions en cours
 - `GET /api/heatmap?site_id=1&page=/` → Données heatmap
+- `GET /api/sites` → Liste des sites
+- `POST /api/sites` → Ajouter un site (body: {name, domain})
 - WebSocket `/ws?site_id=1` → Mise à jour temps réel
 
 ## Conventions

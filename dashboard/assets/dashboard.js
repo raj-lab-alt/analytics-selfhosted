@@ -1,8 +1,23 @@
-const siteId = 1;
+let siteId = parseInt(localStorage.getItem('analytics_site_id')) || 1;
 let chart;
 
 function getToken() { return localStorage.getItem('token'); }
 function api(path) { return fetch(path, { headers: { 'Authorization': 'Bearer ' + getToken() }}); }
+
+async function loadSites() {
+  const r = await api('/api/sites');
+  if (!r.ok) return;
+  const sites = await r.json();
+  const sel = document.getElementById('siteSelect');
+  if (!sel) return;
+  sel.innerHTML = sites.map(s => `<option value="${s.id}" ${s.id == siteId ? 'selected' : ''}>${s.name} (${s.domain})</option>`).join('');
+}
+
+function changeSite(val) {
+  siteId = parseInt(val);
+  localStorage.setItem('analytics_site_id', siteId);
+  loadOverview(parseInt(document.querySelector('.chart-controls button.active')?.dataset?.days) || 7);
+}
 
 async function loadOverview(days) {
   document.querySelectorAll('.chart-controls button').forEach(b => b.classList.toggle('active', b.dataset.days == days));
@@ -44,6 +59,7 @@ async function loadOverview(days) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  loadSites();
   loadOverview(7);
   document.querySelectorAll('.chart-controls button').forEach(b => {
     b.addEventListener('click', function() { loadOverview(parseInt(this.dataset.days)); });

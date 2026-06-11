@@ -36,6 +36,8 @@ app.get('/api/top-sources', dashboardApi.getTopSources);
 app.get('/api/realtime', dashboardApi.getRealtimeCount);
 app.get('/api/active-sessions', getActiveSessions);
 app.get('/api/heatmap', dashboardApi.getHeatmapData);
+app.get('/api/sites', dashboardApi.getSites);
+app.post('/api/sites', dashboardApi.createSite);
 
 app.get('/tracker.js', (req, res) => {
   res.sendFile(path.join(__dirname, 'tracker.js'));

@@ -77,4 +77,20 @@ async function getHeatmapData(req, res) {
   res.json(result);
 }
 
-module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData };
+async function getSites(req, res) {
+  const supabase = db.getClient();
+  const { data } = await supabase.from('sites').select('id, name, domain, api_key, created_at').order('id', { ascending: true });
+  res.json(data || []);
+}
+
+async function createSite(req, res) {
+  const { name, domain } = req.body;
+  if (!name || !domain) return res.status(400).json({ error: 'name and domain required' });
+  const apiKey = require('crypto').randomBytes(16).toString('hex');
+  const supabase = db.getClient();
+  const { data, error } = await supabase.from('sites').insert({ name, domain, api_key: apiKey }).select();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data[0]);
+}
+
+module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getSites, createSite };

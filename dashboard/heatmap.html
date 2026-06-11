@@ -13,9 +13,13 @@
   <a href="/">Overview</a>
   <a href="/realtime.html">Realtime</a>
   <a href="/heatmap.html" class="active">Heatmap</a>
+  <a href="/sites.html">Sites</a>
   <a href="/login.html" class="logout">Logout</a>
 </nav>
 <main class="container">
+  <div class="site-selector" style="margin-bottom:16px">
+    <select id="siteSelect" onchange="changeSite(this.value)" class="input"></select>
+  </div>
   <h1>Click Heatmap</h1>
   <div class="card">
     <label>Page URL:</label>
@@ -25,10 +29,28 @@
   <div id="heatmapCanvas"></div>
 </main>
 <script>
-const siteId = 1;
+let siteId = parseInt(localStorage.getItem('analytics_site_id')) || 1;
+
+function getToken() { return localStorage.getItem('token'); }
+function api(path) { return fetch(path, { headers: { 'Authorization': 'Bearer ' + getToken() }}); }
+
+async function loadSites() {
+  const r = await api('/api/sites');
+  if (!r.ok) return;
+  const sites = await r.json();
+  const sel = document.getElementById('siteSelect');
+  sel.innerHTML = sites.map(s => `<option value="${s.id}" ${s.id == siteId ? 'selected' : ''}>${s.name} (${s.domain})</option>`).join('');
+}
+
+function changeSite(val) {
+  siteId = parseInt(val);
+  localStorage.setItem('analytics_site_id', siteId);
+  loadHeatmap();
+}
+
 function loadHeatmap() {
   const pageUrl = document.getElementById('pageUrl').value;
-  fetch('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl), { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }})
+  api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl))
     .then(r => r.json()).then(data => {
       const container = document.getElementById('heatmapCanvas');
       container.innerHTML = '';
@@ -41,6 +63,8 @@ function loadHeatmap() {
       heat.setData({ max: max || 1, data: points });
     });
 }
+
+loadSites();
 loadHeatmap();
 </script>
 </body>

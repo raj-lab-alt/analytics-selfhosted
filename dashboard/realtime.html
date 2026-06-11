@@ -11,9 +11,13 @@
   <a href="/">Overview</a>
   <a href="/realtime.html" class="active">Realtime</a>
   <a href="/heatmap.html">Heatmap</a>
+  <a href="/sites.html">Sites</a>
   <a href="/login.html" class="logout">Logout</a>
 </nav>
 <main class="container">
+  <div class="site-selector" style="margin-bottom:16px">
+    <select id="siteSelect" onchange="changeSite(this.value)" class="input"></select>
+  </div>
   <h1>Realtime Visitors</h1>
   <div class="stats-grid">
     <div class="stat-card highlight"><h3>Active Now</h3><p id="activeCount">0</p></div>
@@ -28,15 +32,38 @@
   </div>
 </main>
 <script>
-const siteId = 1;
-const ws = new WebSocket('ws://' + location.host + '/ws?site_id=' + siteId);
-ws.onmessage = function(e) {
-  const data = JSON.parse(e.data);
-  document.getElementById('activeCount').textContent = data.active;
-};
+let siteId = parseInt(localStorage.getItem('analytics_site_id')) || 1;
+let ws;
+
+function getToken() { return localStorage.getItem('token'); }
+function api(path) { return fetch(path, { headers: { 'Authorization': 'Bearer ' + getToken() }}); }
+
+async function loadSites() {
+  const r = await api('/api/sites');
+  if (!r.ok) return;
+  const sites = await r.json();
+  const sel = document.getElementById('siteSelect');
+  sel.innerHTML = sites.map(s => `<option value="${s.id}" ${s.id == siteId ? 'selected' : ''}>${s.name} (${s.domain})</option>`).join('');
+}
+
+function changeSite(val) {
+  siteId = parseInt(val);
+  localStorage.setItem('analytics_site_id', siteId);
+  connectWS();
+  fetchSessions();
+}
+
+function connectWS() {
+  if (ws) ws.close();
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/ws?site_id=' + siteId);
+  ws.onmessage = function(e) {
+    const data = JSON.parse(e.data);
+    document.getElementById('activeCount').textContent = data.active;
+  };
+}
 
 function fetchSessions() {
-  fetch('/api/active-sessions?site_id=' + siteId, { headers: { 'Authorization': 'Bearer ' + localStorage.getItem('token') }})
+  api('/api/active-sessions?site_id=' + siteId)
     .then(r => r.json()).then(data => {
       document.getElementById('activeCount').textContent = data.total;
       document.getElementById('todayCount').textContent = data.total;
@@ -45,9 +72,12 @@ function fetchSessions() {
       ).join('');
     });
 }
+
+function esc(s) { return s || '-'; }
+loadSites();
+connectWS();
 fetchSessions();
 setInterval(fetchSessions, 10000);
-function esc(s) { return s || '-'; }
 </script>
 </body>
 </html>
