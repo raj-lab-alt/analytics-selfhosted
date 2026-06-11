@@ -95,7 +95,7 @@ function loadHeatmap() {
       var heat = h337.create({ container, radius: 20, blur: .85 });
       var max = 0;
       data.forEach(d => { if (d.count > max) max = d.count; });
-      var points = data.map(d => ({ x: Math.round(d.x * w / 1920), y: Math.round(d.y * h / 1080), value: d.count }));
+      var points = data.map(d => ({ x: Math.round(d.x * w), y: Math.round(d.y * h), value: d.count }));
       heat.setData({ max: max || 1, data: points });
     }).catch(e => console.error('heatmap error:', e));
 }

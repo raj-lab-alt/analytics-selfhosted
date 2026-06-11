@@ -98,13 +98,21 @@ async function getHeatmapData(req, res) {
   const escaped = path.replace(/[%_]/g, '\\$&');
   const { data } = await supabase
     .from('heatmap_events')
-    .select('x, y')
+    .select('x, y, viewport_w, viewport_h')
     .eq('site_id', siteId)
     .like('page_url', escaped + '%')
     .in('event_type', ['click', 'move']);
   const counts = {};
-  (data || []).forEach(e => { const k = e.x + ',' + e.y; counts[k] = (counts[k] || 0) + 1; });
-  const result = Object.entries(counts).map(([k, count]) => { const [x, y] = k.split(','); return { x: parseInt(x), y: parseInt(y), count }; });
+  (data || []).forEach(e => {
+    const vw = e.viewport_w || 1920, vh = e.viewport_h || 1080;
+    const fx = Math.round((e.x / vw) * 1000), fy = Math.round((e.y / vh) * 1000);
+    const k = fx + ',' + fy;
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  const result = Object.entries(counts).map(([k, count]) => {
+    const [fx, fy] = k.split(',').map(Number);
+    return { x: fx / 1000, y: fy / 1000, count };
+  });
   res.json(result);
 }
 
