@@ -128,11 +128,18 @@ document.addEventListener('DOMContentLoaded', function() {
   document.querySelectorAll('.chart-controls button').forEach(function(b) {
     b.addEventListener('click', function() { loadOverview(parseInt(this.dataset.days)); });
   });
-  // Active count polling
+  // Active count + Today polling every 10s
   setInterval(function() {
     api('/api/realtime?site_id=' + siteId).then(function(r) { return r.json(); }).then(function(d) {
       var el = document.getElementById('activeCount');
       if (el) el.textContent = d.active;
+    });
+    api('/api/overview?site_id=' + siteId + '&days=90').then(function(r) { return r.json(); }).then(function(data) {
+      if (Array.isArray(data) && data.length) {
+        var todayRow = data[data.length - 1];
+        var el = document.getElementById('todayViews');
+        if (el) el.textContent = todayRow.pages_vues || 0;
+      }
     });
   }, 10000);
 });

@@ -251,7 +251,7 @@ async function processEvent(req) {
       utm_source: utm_source || '', utm_medium: utm_medium || '', utm_campaign: utm_campaign || '',
     });
     bufferSize++;
-    if (bufferSize >= FLUSH_THRESHOLD || event_type === 'exit') flushBuffer();
+    if (bufferSize >= FLUSH_THRESHOLD || event_type === 'exit' || event_type === 'pageview') flushBuffer();
   }
 }
 
