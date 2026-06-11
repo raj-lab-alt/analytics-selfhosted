@@ -229,4 +229,44 @@ async function getTrafficSources(req, res) {
   res.json(result);
 }
 
-module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources };
+async function getPlatforms(req, res) {
+  const siteId = req.query.site_id || 1;
+  const days = parseInt(req.query.days) || 7;
+  const supabase = db.getClient();
+  const startDate = new Date(Date.now() - days * 86400000).toISOString();
+  const { data } = await supabase
+    .from('raw_events')
+    .select('ua')
+    .eq('site_id', siteId)
+    .eq('event_type', 'pageview')
+    .gte('created_at', startDate);
+  const devices = { desktop: 0, mobile: 0, tablet: 0 };
+  const browsers = {};
+  const os = {};
+  (data || []).forEach(e => {
+    const u = (e.ua || '').toLowerCase();
+    if (/tablet|ipad/i.test(u)) devices.tablet++;
+    else if (/mobile|iphone|ipod|android.*mobile/i.test(u)) devices.mobile++;
+    else devices.desktop++;
+    if (/edg/i.test(u)) browsers.Edge = (browsers.Edge || 0) + 1;
+    else if (/chrome/i.test(u)) browsers.Chrome = (browsers.Chrome || 0) + 1;
+    else if (/safari/i.test(u)) browsers.Safari = (browsers.Safari || 0) + 1;
+    else if (/firefox/i.test(u)) browsers.Firefox = (browsers.Firefox || 0) + 1;
+    else if (/opera|opr/i.test(u)) browsers.Opera = (browsers.Opera || 0) + 1;
+    else if (/msie|trident/i.test(u)) browsers.IE = (browsers.IE || 0) + 1;
+    else browsers.Other = (browsers.Other || 0) + 1;
+    if (/iphone|ipad|ipod/i.test(u)) os.iOS = (os.iOS || 0) + 1;
+    else if (/android/i.test(u)) os.Android = (os.Android || 0) + 1;
+    else if (/macintosh|mac os x/i.test(u)) os.macOS = (os.macOS || 0) + 1;
+    else if (/windows/i.test(u)) os.Windows = (os.Windows || 0) + 1;
+    else if (/linux/i.test(u)) os.Linux = (os.Linux || 0) + 1;
+    else os.Other = (os.Other || 0) + 1;
+  });
+  const total = Object.values(devices).reduce((a, b) => a + b, 0) || 1;
+  const devicePct = Object.entries(devices).map(([k, v]) => ({ label: k, count: v, pct: Math.round(v / total * 100) }));
+  const browserPct = Object.entries(browsers).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: k, count: v, pct: Math.round(v / total * 100) }));
+  const osPct = Object.entries(os).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: k, count: v, pct: Math.round(v / total * 100) }));
+  res.json({ devices: devicePct, browsers: browserPct, os: osPct });
+}
+
+module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources, getPlatforms };

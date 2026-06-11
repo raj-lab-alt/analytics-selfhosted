@@ -69,6 +69,7 @@ app.get('/api/visitor-locations', dashboardApi.getVisitorLocations);
 app.get('/api/top-cities', dashboardApi.getTopCities);
 app.get('/api/stats', dashboardApi.getStats);
 app.get('/api/traffic-sources', dashboardApi.getTrafficSources);
+app.get('/api/platforms', dashboardApi.getPlatforms);
 app.get('/api/sites', dashboardApi.getSites);
 app.post('/api/sites', dashboardApi.createSite);
 

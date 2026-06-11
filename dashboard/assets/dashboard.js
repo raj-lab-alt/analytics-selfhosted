@@ -72,6 +72,17 @@ async function loadOverview(days) {
       '<p class="traffic-pct">' + t.pct + '%</p>' +
     '</div>'
   ).join('');
+
+  const platforms = await (await api('/api/platforms?site_id=' + siteId + '&days=' + days)).json();
+  document.getElementById('platformDevices').innerHTML = '<table>' + platforms.devices.map(d =>
+    '<tr><td>' + d.label.charAt(0).toUpperCase() + d.label.slice(1) + '</td><td>' + d.pct + '%</td></tr>'
+  ).join('') + '</table>';
+  document.getElementById('platformBrowsers').innerHTML = '<table>' + platforms.browsers.map(b =>
+    '<tr><td>' + b.label + '</td><td>' + b.pct + '%</td></tr>'
+  ).join('') + '</table>';
+  document.getElementById('platformOS').innerHTML = '<table>' + platforms.os.map(o =>
+    '<tr><td>' + o.label + '</td><td>' + o.pct + '%</td></tr>'
+  ).join('') + '</table>';
 }
 
 document.addEventListener('DOMContentLoaded', function() {

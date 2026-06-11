@@ -16,9 +16,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .chart-controls button { padding: 6px 16px; border: 1px solid #ddd; background: #fff; border-radius: 4px; cursor: pointer; }
 .chart-controls button.active { background: #1a1a2e; color: #fff; border-color: #1a1a2e; }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.row.three { grid-template-columns: 1fr 1fr 1fr; }
 .card { background: #fff; border-radius: 8px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.1); margin-bottom: 16px; }
 .card h2 { font-size: 16px; margin-bottom: 12px; }
 .half { }
+.third { }
 table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px; }
 th { color: #888; font-weight: 600; text-transform: uppercase; font-size: 11px; }
