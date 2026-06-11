@@ -16,10 +16,14 @@
     sessionStorage.setItem('as_sid', sessionId);
   }
 
+  function cleanUrl(u) {
+    try { var p = new URL(u); var params = ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','utm_id','fbclid','gclid','gclsrc','msclkid']; var q = new URLSearchParams(p.search); params.forEach(function(k) { q.delete(k); }); var s = q.toString(); return s ? p.origin + p.pathname + '?' + s : p.origin + p.pathname; } catch(e) { return u; }
+  }
+
   function send(data) {
     data.site_id = parseInt(siteId);
     data.session_id = sessionId;
-    data.url = window.location.href;
+    data.url = cleanUrl(window.location.href);
     data.referrer = document.referrer || '';
     data.screen_w = screen.width;
     data.screen_h = screen.height;
