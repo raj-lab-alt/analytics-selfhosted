@@ -208,46 +208,48 @@ async function getStats(req, res) {
   const supabase = db.getClient();
   const startDate = new Date(Date.now() - days * 86400000).toISOString();
 
-  // Compute avg session duration from raw_events per-session first/last timestamps
   let avgDuration = 0;
   try {
-    const { data: events } = await supabase
+    const { data: sessions } = await supabase
       .from('raw_events')
       .select('session_id, created_at')
       .eq('site_id', siteId)
       .gte('created_at', startDate);
-    if (events && events.length > 0) {
-      const sessions = {};
-      events.forEach(e => {
-        if (!sessions[e.session_id]) sessions[e.session_id] = { first: e.created_at, last: e.created_at };
+
+    if (sessions && sessions.length > 0) {
+      const map = {};
+      sessions.forEach(e => {
+        if (!map[e.session_id]) map[e.session_id] = { first: e.created_at, last: e.created_at };
         else {
-          if (e.created_at < sessions[e.session_id].first) sessions[e.session_id].first = e.created_at;
-          if (e.created_at > sessions[e.session_id].last) sessions[e.session_id].last = e.created_at;
+          if (e.created_at < map[e.session_id].first) map[e.session_id].first = e.created_at;
+          if (e.created_at > map[e.session_id].last) map[e.session_id].last = e.created_at;
         }
       });
-      const totalMs = Object.values(sessions).reduce((sum, s) => {
-        return sum + (new Date(s.last).getTime() - new Date(s.first).getTime());
-      }, 0);
-      avgDuration = Math.round(totalMs / Object.keys(sessions).length / 1000);
+      const totalMs = Object.values(map).reduce((sum, s) => sum + (new Date(s.last).getTime() - new Date(s.first).getTime()), 0);
+      const count = Object.keys(map).length;
+      avgDuration = count > 0 ? Math.round(totalMs / count / 1000) : 0;
     }
   } catch (e) {}
 
   // Referrer breakdown
-  const { data: referrers } = await supabase
-    .from('raw_events')
-    .select('referrer')
-    .eq('site_id', siteId)
-    .eq('event_type', 'pageview')
-    .neq('referrer', '')
-    .gte('created_at', startDate);
-  const refCounts = {};
-  (referrers || []).forEach(e => {
-    const ref = e.referrer || '(direct)';
-    refCounts[ref] = (refCounts[ref] || 0) + 1;
-  });
-  const topReferrers = Object.entries(refCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([referrer, count]) => ({ referrer, count }));
-
-  res.json({ avgDuration, topReferrers });
+  try {
+    const { data: referrers } = await supabase
+      .from('raw_events')
+      .select('referrer')
+      .eq('site_id', siteId)
+      .eq('event_type', 'pageview')
+      .neq('referrer', '')
+      .gte('created_at', startDate);
+    const refCounts = {};
+    (referrers || []).forEach(e => {
+      const ref = e.referrer || '(direct)';
+      refCounts[ref] = (refCounts[ref] || 0) + 1;
+    });
+    const topReferrers = Object.entries(refCounts).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([referrer, count]) => ({ referrer, count }));
+    return res.json({ avgDuration, topReferrers });
+  } catch (e) {
+    return res.json({ avgDuration, topReferrers: [] });
+  }
 }
 
 async function getTrafficSources(req, res) {

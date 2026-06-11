@@ -61,7 +61,7 @@ async function loadOverview(selectedDays) {
   // Avg visit duration & top city (use selectedDays for these)
   try {
     var stats = await (await api('/api/stats?site_id=' + siteId + '&days=' + selectedDays)).json();
-    document.getElementById('avgVisit').textContent = (stats.avgDuration || 0) + 's';
+    document.getElementById('avgVisit').textContent = stats.avgDuration > 0 ? stats.avgDuration + 's' : '—';
   } catch(e) { document.getElementById('avgVisit').textContent = '—'; }
 
   try {
