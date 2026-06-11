@@ -1,7 +1,7 @@
 # Analytics Self-Hosted
 
 ## Stack
-- Node.js (Express), PostgreSQL (pg), WebSocket (ws)
+- Node.js (Express), PostgreSQL (pg + @supabase/supabase-js), WebSocket (ws)
 - Hébergement : Hostinger Node.js + Supabase (PostgreSQL)
 - Frontend : Vanilla JS + Chart.js + heatmap.js
 
@@ -9,7 +9,7 @@
 ```
 server.js            → Entry point (Express + WebSocket)
 tracker.js           → Script client à embarquer sur les sites
-install.sql          → Schema MySQL
+install.sql          → Schema PostgreSQL
 db.js                → Client Supabase (validation Hostinger)
 src/
   db.js              → Pool PostgreSQL (pg) avec support Supabase env vars
@@ -63,4 +63,5 @@ Sans heatmap :
 - Pas de dépendances lourdes au-delà de Express, pg, ws, @supabase/supabase-js
 - Le tracker JS doit rester < 10KB
 - Les mots de passe/tokens dans .env, jamais commités
+- Le tracker JS reste < 10KB, sans dépendance externe
 - Les données brutes sont purgées après 90 jours
