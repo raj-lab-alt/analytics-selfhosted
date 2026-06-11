@@ -52,7 +52,6 @@ async function collect(req, res) {
       lat: geo.lat,
       lon: geo.lon,
       ua,
-      started_at: sessionStarted,
       last_ping: now,
     }, { onConflict: 'session_id' });
   } catch (e) {}

@@ -162,21 +162,29 @@ async function getStats(req, res) {
   const supabase = db.getClient();
   const startDate = new Date(Date.now() - days * 86400000).toISOString();
 
-  const { data: sessions } = await supabase
-    .from('active_sessions')
-    .select('started_at, last_ping')
-    .eq('site_id', siteId)
-    .gte('last_ping', startDate);
-
+  // Compute avg session duration from raw_events per-session first/last timestamps
   let avgDuration = 0;
-  if (sessions && sessions.length > 0) {
-    const totalMs = sessions.reduce((sum, s) => {
-      const start = new Date(s.started_at || s.last_ping).getTime();
-      const end = new Date(s.last_ping).getTime();
-      return sum + Math.max(0, end - start);
-    }, 0);
-    avgDuration = Math.round(totalMs / sessions.length / 1000);
-  }
+  try {
+    const { data: events } = await supabase
+      .from('raw_events')
+      .select('session_id, created_at')
+      .eq('site_id', siteId)
+      .gte('created_at', startDate);
+    if (events && events.length > 0) {
+      const sessions = {};
+      events.forEach(e => {
+        if (!sessions[e.session_id]) sessions[e.session_id] = { first: e.created_at, last: e.created_at };
+        else {
+          if (e.created_at < sessions[e.session_id].first) sessions[e.session_id].first = e.created_at;
+          if (e.created_at > sessions[e.session_id].last) sessions[e.session_id].last = e.created_at;
+        }
+      });
+      const totalMs = Object.values(sessions).reduce((sum, s) => {
+        return sum + (new Date(s.last).getTime() - new Date(s.first).getTime());
+      }, 0);
+      avgDuration = Math.round(totalMs / Object.keys(sessions).length / 1000);
+    }
+  } catch (e) {}
 
   // Referrer breakdown
   const { data: referrers } = await supabase
