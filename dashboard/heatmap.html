@@ -12,8 +12,10 @@
 #heatmapOverlay { position:absolute; top:0; left:0; width:100%; height:100%; z-index:10; pointer-events:none; }
 #heatmapCanvas { position:relative; width:100%; height:100%; }
 #scrollCanvas { position:absolute; top:0; left:0; width:6px; z-index:5; pointer-events:none; }
-.mode-btn { padding:6px 14px; border:1px solid #ddd; background:#fff; cursor:pointer; font-size:13px; border-radius:4px 0 0 4px; }
-.mode-btn + .mode-btn { border-left:0; border-radius:0 4px 4px 0; }
+#modeBar { display:flex; gap:0; }
+.mode-btn { padding:6px 14px; border:1px solid #ddd; background:#fff; cursor:pointer; font-size:13px; }
+.mode-btn:first-child { border-radius:4px 0 0 4px; }
+.mode-btn:last-child { border-radius:0 4px 4px 0; border-left:0; }
 .mode-btn.active { background:#4A90D9; color:#fff; border-color:#4A90D9; }
 </style>
 </head>
@@ -36,9 +38,9 @@
     <select id="pageSelect" onchange="loadData()" class="input" style="width:400px"></select>
     <span id="dataCount" style="color:#888;font-size:13px"></span>
     <span style="margin-left:auto"></span>
-    <span id="modeGroup">
-      <button class="mode-btn active" data-mode="heat" onclick="switchMode('heat')">Clics + Mouvements</button>
-      <button class="mode-btn" data-mode="scroll" onclick="switchMode('scroll')">Profondeur scroll</button>
+    <span id="modeBar">
+      <button class="mode-btn active" data-mode="heat" onclick="switchMode('heat')">Clics+Mouvements</button>
+      <button class="mode-btn" data-mode="scroll" onclick="switchMode('scroll')">Scroll</button>
     </span>
   </div>
   <div id="heatmapWrap">
@@ -46,23 +48,23 @@
     <div id="heatmapOverlay"><div id="heatmapCanvas"></div><canvas id="scrollCanvas"></canvas></div>
     <div id="heatmapEmpty" style="display:none; padding:40px; text-align:center; color:#888;">Aucune donnée sur cette page.</div>
   </div>
-  <p style="margin-top:6px;font-size:12px;color:#999">La page s'affiche via proxy. Les scripts ne sont pas exécutés (sandbox).</p>
+  <p style="margin-top:6px;font-size:12px;color:#999">Proxy page preview (sandbox, pas de JS).</p>
 </main>
 <script>
 let siteId = parseInt(localStorage.getItem('analytics_site_id')) || 1;
 let currentMode = 'heat';
-let lastData = null;
+let lastHeat = null, lastScroll = null;
 
 function getToken() { return localStorage.getItem('token'); }
-function api(path) { return fetch(path, { headers: { 'Authorization': 'Bearer ' + getToken() }}).then(r => { if (r.status === 401) { localStorage.removeItem('token'); window.location.href = '/login.html'; } return r; }); }
+function api(path) { return fetch(path, { headers: { 'Authorization': 'Bearer ' + getToken() }}); }
 
 async function loadSites() {
   const r = await api('/api/sites');
-  if (!r.ok) return;
+  if (!r.ok) { if (r.status === 401) window.location = '/login.html'; return; }
   const sites = await r.json();
   const sel = document.getElementById('siteSelect');
-  sel.innerHTML = sites.map(s => `<option value="${s.id}" ${s.id == siteId ? 'selected' : ''}>${s.name} (${s.domain})</option>`).join('');
-  await loadPages();
+  sel.innerHTML = sites.map(s => `<option value="${s.id}" ${s.id == siteId ? 'selected' : ''}>${s.name}</option>`).join('');
+  loadPages();
 }
 
 function changeSite(val) {
@@ -77,15 +79,14 @@ async function loadPages() {
   try {
     const r = await api('/api/top-pages?site_id=' + siteId + '&days=30');
     const pages = await r.json();
+    if (!pages || pages.length === 0) { sel.innerHTML = ''; loadData(); return; }
     const grouped = {};
     pages.forEach(p => {
-      let key = p.page;
-      try { const u = new URL(p.page); key = u.origin + u.pathname; } catch(e) {}
-      if (!grouped[key]) grouped[key] = { page: key, vues: 0 };
-      grouped[key].vues += p.vues;
+      try { const u = new URL(p.page); p.page = u.origin + u.pathname; } catch(e) {}
+      grouped[p.page] = (grouped[p.page] || 0) + p.vues;
     });
-    sel.innerHTML = Object.values(grouped).map(p => '<option value="' + p.page.replace(/"/g, '&quot;') + '">' + p.page + ' (' + p.vues + ' vues)</option>').join('');
-  } catch(e) {}
+    sel.innerHTML = Object.entries(grouped).map(([url, vues]) => '<option value="' + url.replace(/"/g, '&quot;') + '">' + url + ' (' + vues + ' vues)</option>').join('');
+  } catch(e) { console.error('loadPages error:', e); }
   loadData();
 }
 
@@ -100,29 +101,25 @@ function loadData() {
   if (!pageUrl) return;
   document.getElementById('heatmapFrame').src = '/page-preview?url=' + encodeURIComponent(pageUrl);
   document.getElementById('heatmapEmpty').style.display = 'none';
-  const container = document.getElementById('heatmapCanvas');
-  container.innerHTML = '';
   document.getElementById('dataCount').textContent = 'Chargement...';
-  Promise.all([
-    api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json()),
-    api('/api/scroll-depth?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json())
-  ]).then(([heatData, scrollData]) => {
-    lastData = { heat: heatData, scroll: scrollData };
-    renderData();
-  }).catch(e => console.error('load error:', e));
+  api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json()).then(d => {
+    lastHeat = d; renderData();
+  }).catch(e => console.error('heatmap API error:', e));
+  api('/api/scroll-depth?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json()).then(d => {
+    lastScroll = d; if (currentMode === 'scroll') renderData();
+  }).catch(e => console.error('scroll API error:', e));
 }
 
 function renderData() {
-  if (!lastData) return;
-  const container = document.getElementById('heatmapCanvas');
-  if (currentMode === 'heat') renderHeat(container, lastData.heat);
-  else renderScroll(container, lastData.scroll);
+  if (currentMode === 'heat' && lastHeat) renderHeat(lastHeat);
+  else if (currentMode === 'scroll' && lastScroll) renderScroll(lastScroll);
 }
 
-function renderHeat(container, res) {
+function renderHeat(res) {
   const data = res.points || res;
   const pageH = res.pageHeight || 800;
   document.getElementById('dataCount').textContent = data.length + ' points';
+  const container = document.getElementById('heatmapCanvas');
   container.innerHTML = '';
   if (data.length === 0) { document.getElementById('heatmapEmpty').style.display = ''; return; }
   document.getElementById('heatmapEmpty').style.display = 'none';
@@ -138,14 +135,14 @@ function renderHeat(container, res) {
   var heat = h337.create({ container, radius: 20, blur: .85 });
   var max = 0;
   data.forEach(d => { if (d.count > max) max = d.count; });
-  var points = data.map(d => ({ x: Math.round(d.x * w), y: Math.round(d.y * h), value: d.count }));
-  heat.setData({ max: max || 1, data: points });
+  heat.setData({ max: max || 1, data: data.map(d => ({ x: Math.round(d.x * w), y: Math.round(d.y * h), value: d.count })) });
 }
 
-function renderScroll(container, res) {
+function renderScroll(res) {
   const rows = res.rows || [];
   const pageH = res.pageHeight || 800;
   document.getElementById('dataCount').textContent = (res.total || 0) + ' sessions';
+  const container = document.getElementById('heatmapCanvas');
   container.innerHTML = '';
   if (rows.length === 0) { document.getElementById('heatmapEmpty').style.display = ''; return; }
   document.getElementById('heatmapEmpty').style.display = 'none';
@@ -159,20 +156,18 @@ function renderScroll(container, res) {
   frame.style.height = h + 'px';
   container.style.height = h + 'px';
   const canvas = document.getElementById('scrollCanvas');
-  canvas.width = 80;
-  canvas.height = h;
-  canvas.style.height = h + 'px';
+  canvas.width = 80; canvas.height = h; canvas.style.height = h + 'px';
   const ctx = canvas.getContext('2d');
   rows.forEach(r => {
     const y0 = Math.round(r.y * h);
     const y1 = Math.round((r.y + 50 / pageH) * h);
-    const alpha = r.visibility;
-    const R = Math.round(255 * (1 - alpha));
-    const G = Math.round(255 * alpha);
-    ctx.fillStyle = 'rgba(' + R + ',' + G + ',0,0.85)';
+    const a = r.visibility;
+    ctx.fillStyle = 'rgba(' + Math.round(255*(1-a)) + ',' + Math.round(255*a) + ',0,0.85)';
     ctx.fillRect(0, y0, 80, Math.max(1, y1 - y0));
   });
 }
+
+loadSites();
 </script>
 </body>
 </html>
