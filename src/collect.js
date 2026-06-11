@@ -47,8 +47,6 @@ async function collect(req, res) {
       referrer: referrer || '',
       country: geo.country,
       city: geo.city,
-      lat: geo.lat,
-      lon: geo.lon,
       ua,
       last_ping: new Date().toISOString(),
     }, { onConflict: 'session_id' });
