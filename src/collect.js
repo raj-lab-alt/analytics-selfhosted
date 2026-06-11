@@ -234,6 +234,10 @@ async function processEvent(req) {
       viewport_w: b.viewport_w || 0, viewport_h: b.viewport_h || 0,
       scroll_y: b.scroll_y || 0, event_type,
       session_id,
+      device_type: b.device_type || '',
+      utm_source: utm_source || '',
+      utm_medium: utm_medium || '',
+      utm_campaign: utm_campaign || '',
     });
     if (heatBuffer.length >= HEAT_FLUSH_THRESHOLD) flushHeatBuffer();
   }

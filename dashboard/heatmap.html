@@ -29,6 +29,12 @@
 table.compact { width:100%; border-collapse:collapse; font-size:12px; }
 table.compact th { text-align:left; padding:4px 6px; border-bottom:1px solid #ddd; font-weight:600; color:#555; }
 table.compact td { padding:4px 6px; border-bottom:1px solid #eee; }
+#zonePopup { position:absolute; z-index:50; background:#fff; border:1px solid #ccc; border-radius:6px; padding:10px 14px; min-width:180px; box-shadow:0 4px 12px rgba(0,0,0,0.15); font-size:12px; display:none; pointer-events:auto; }
+#zonePopup h4 { margin:0 0 6px; font-size:13px; color:#333; }
+#zonePopup table { width:100%; border-collapse:collapse; }
+#zonePopup td { padding:2px 4px; border-bottom:1px solid #eee; }
+#zonePopup td:last-child { text-align:right; font-weight:600; }
+#zonePopup .close { float:right; cursor:pointer; color:#888; font-size:14px; }
 @media(max-width:720px){.row.three,.row.two{flex-direction:column;}}
 </style>
 </head>
@@ -83,6 +89,26 @@ table.compact td { padding:4px 6px; border-bottom:1px solid #eee; }
       <option value="blue-orange">Bleu→Orange</option>
     </select>
   </div>
+  <div class="card" style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 12px;font-size:12px;">
+    <label style="color:#888;">Appareil:</label>
+    <select id="filterDevice" onchange="loadData()" style="font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
+      <option value="all">Tous</option>
+      <option value="desktop">Desktop</option>
+      <option value="mobile">Mobile</option>
+      <option value="tablet">Tablette</option>
+    </select>
+    <label style="color:#888;">UTM source:</label>
+    <input type="text" id="filterUtmSource" placeholder="ex: google" class="input" style="width:100px;font-size:12px;padding:2px 6px;" onchange="loadData()">
+    <label style="color:#888;">Campagne:</label>
+    <input type="text" id="filterUtmCampaign" placeholder="ex: été2024" class="input" style="width:100px;font-size:12px;padding:2px 6px;" onchange="loadData()">
+    <span style="border-left:1px solid #ddd;height:20px"></span>
+    <label style="color:#888;">Du:</label>
+    <input type="date" id="filterDateFrom" onchange="loadData()" style="font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
+    <label style="color:#888;">Au:</label>
+    <input type="date" id="filterDateTo" onchange="loadData()" style="font-size:12px;padding:2px 6px;border:1px solid #ccc;border-radius:3px;">
+    <span style="border-left:1px solid #ddd;height:20px"></span>
+    <button onclick="loadData()" style="font-size:12px;padding:3px 10px;background:#4A90D9;color:#fff;border:none;border-radius:3px;cursor:pointer;">Appliquer</button>
+  </div>
   <div id="heatmapWrap">
     <iframe id="heatmapFrame" sandbox="" loading="lazy"></iframe>
     <div id="heatmapOverlay"><div id="heatmapCanvas"></div><canvas id="scrollCanvas"></canvas></div>
@@ -92,6 +118,11 @@ table.compact td { padding:4px 6px; border-bottom:1px solid #eee; }
     <span>Faible</span>
     <canvas id="legendGrad" width="400" height="12"></canvas>
     <span>Fort</span>
+  </div>
+  <div id="zonePopup" onclick="event.stopPropagation()">
+    <span class="close" onclick="closeZonePopup()">&times;</span>
+    <h4>Zone d'engagement</h4>
+    <div id="zonePopupBody"></div>
   </div>
 
   <div class="row three" style="margin-top:20px">
@@ -156,6 +187,21 @@ function getPageUrl() {
   return document.getElementById('pageSelect').value;
 }
 
+function getFilters() {
+  var parts = [];
+  var d = document.getElementById('filterDevice').value;
+  if (d && d !== 'all') parts.push('device_type=' + d);
+  var us = document.getElementById('filterUtmSource').value.trim();
+  if (us) parts.push('utm_source=' + encodeURIComponent(us));
+  var uc = document.getElementById('filterUtmCampaign').value.trim();
+  if (uc) parts.push('utm_campaign=' + encodeURIComponent(uc));
+  var df = document.getElementById('filterDateFrom').value;
+  if (df) parts.push('date_from=' + df);
+  var dt = document.getElementById('filterDateTo').value;
+  if (dt) parts.push('date_to=' + dt);
+  return parts.length ? '&' + parts.join('&') : '';
+}
+
 function selectPage(val) {
   document.getElementById('pageInput').value = val;
   loadData();
@@ -202,6 +248,10 @@ function setFilter(type) {
 function switchMode(mode) {
   currentMode = mode;
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  var overlay = document.getElementById('heatmapOverlay');
+  if (mode === 'zones') overlay.style.pointerEvents = 'auto';
+  else overlay.style.pointerEvents = 'none';
+  closeZonePopup();
   if (mode === 'clickmap') loadClickmap();
   else if (mode === 'zones') loadZones();
   else renderData();
@@ -233,7 +283,8 @@ function loadData() {
   document.getElementById('dataCount').textContent = 'Chargement...';
   var typeParam = currentType === 'all' ? '' : '&type=' + currentType;
   var accParam = viewportAccuracy > 0 ? '&viewport_accuracy=' + viewportAccuracy : '';
-  api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl) + typeParam + accParam).then(r => r.json()).then(d => {
+  var flt = getFilters();
+  api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl) + typeParam + accParam + flt).then(r => r.json()).then(d => {
     lastHeat = d; if (currentMode === 'heat') renderData();
   }).catch(e => console.error('heatmap API error:', e));
   api('/api/scroll-depth?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json()).then(d => {
@@ -247,7 +298,8 @@ async function loadClickmap() {
   const pageUrl = getPageUrl();
   if (!pageUrl) return;
   try {
-    const r = await api('/api/heatmaps/clickmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json());
+    var flt = getFilters();
+    const r = await api('/api/heatmaps/clickmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl) + flt).then(r => r.json());
     lastClickmap = r;
     if (currentMode === 'clickmap') renderClickmap(r);
   } catch(e) { console.error('clickmap error:', e); }
@@ -257,16 +309,17 @@ async function loadEnrichment(pageUrl) {
   const enc = encodeURIComponent(pageUrl);
   const base = '/api/heatmaps';
   const sid = siteId;
+  const flt = getFilters();
   try {
     const [sum, ctas, forms, dead, rage, scrollDist, funnel, problems] = await Promise.all([
-      api(`${base}/summary?site_id=${sid}&page=${enc}`).then(r => r.json()),
-      api(`${base}/ctas?site_id=${sid}&page=${enc}`).then(r => r.json()),
-      api(`${base}/forms?site_id=${sid}&page=${enc}`).then(r => r.json()),
-      api(`${base}/dead-clicks?site_id=${sid}&page=${enc}`).then(r => r.json()),
-      api(`${base}/rage-clicks?site_id=${sid}&page=${enc}`).then(r => r.json()),
-      api(`${base}/scroll-distribution?site_id=${sid}&page=${enc}`).then(r => r.json()),
-      api(`${base}/form-funnel?site_id=${sid}&page=${enc}`).then(r => r.json()),
-      api(`${base}/problem-ranking?site_id=${sid}&page=${enc}`).then(r => r.json()),
+      api(`${base}/summary?site_id=${sid}&page=${enc}${flt}`).then(r => r.json()),
+      api(`${base}/ctas?site_id=${sid}&page=${enc}${flt}`).then(r => r.json()),
+      api(`${base}/forms?site_id=${sid}&page=${enc}${flt}`).then(r => r.json()),
+      api(`${base}/dead-clicks?site_id=${sid}&page=${enc}${flt}`).then(r => r.json()),
+      api(`${base}/rage-clicks?site_id=${sid}&page=${enc}${flt}`).then(r => r.json()),
+      api(`${base}/scroll-distribution?site_id=${sid}&page=${enc}${flt}`).then(r => r.json()),
+      api(`${base}/form-funnel?site_id=${sid}&page=${enc}${flt}`).then(r => r.json()),
+      api(`${base}/problem-ranking?site_id=${sid}&page=${enc}${flt}`).then(r => r.json()),
     ]);
     renderSummary(sum);
     renderCtas(ctas);
@@ -284,7 +337,8 @@ async function loadZones() {
   const pageUrl = getPageUrl();
   if (!pageUrl) return;
   try {
-    const r = await api('/api/heatmaps/engagement-zones?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl) + '&grid=5').then(r => r.json());
+    var flt = getFilters();
+    const r = await api('/api/heatmaps/engagement-zones?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl) + '&grid=5' + flt).then(r => r.json());
     lastZones = r;
     renderZones(r);
   } catch(e) { console.error('loadZones error:', e); }
@@ -391,19 +445,12 @@ function renderZones(res) {
     document.getElementById('dataCount').textContent = zones.length + ' zones · ' + (res.total_sessions || 0) + ' sessions';
     const container = document.getElementById('heatmapCanvas');
     container.innerHTML = '';
+    closeZonePopup();
     if (zones.length === 0) { document.getElementById('heatmapEmpty').style.display = ''; return; }
     document.getElementById('heatmapEmpty').style.display = 'none';
     const wrap = document.getElementById('heatmapWrap');
-    const overlay = document.getElementById('heatmapOverlay');
-    const frame = document.getElementById('heatmapFrame');
     const w = container.offsetWidth || 1200;
     const h = wrap.offsetHeight || 800;
-    var canvas = document.createElement('canvas');
-    canvas.width = w; canvas.height = h;
-    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-    canvas.style.position = 'absolute'; canvas.style.top = '0'; canvas.style.left = '0';
-    container.appendChild(canvas);
-    var ctx = canvas.getContext('2d');
     var grid = res.grid_size || 5;
     var maxScore = zones.reduce(function(m, z) { return Math.max(m, z.engagement_score); }, 1);
 
@@ -414,22 +461,53 @@ function renderZones(res) {
       var zh = (grid / 100) * h;
       var t = z.engagement_score / maxScore;
       var col = getPaletteColor(t, currentPalette || 'default');
-      ctx.fillStyle = 'rgba(' + col.r + ',' + col.g + ',' + col.b + ',0.35)';
-      ctx.fillRect(zx, zy, Math.max(1, zw), Math.max(1, zh));
-      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-      ctx.lineWidth = 0.5;
-      ctx.strokeRect(zx, zy, Math.max(1, zw), Math.max(1, zh));
+      var div = document.createElement('div');
+      div.style.cssText = 'position:absolute;left:' + zx + 'px;top:' + zy + 'px;width:' + Math.max(1, zw) + 'px;height:' + Math.max(1, zh) + 'px;background:rgba(' + col.r + ',' + col.g + ',' + col.b + ',0.35);border:0.5px solid rgba(255,255,255,0.3);cursor:pointer;pointer-events:auto;';
+      div.title = z.clicks + ' clics, score: ' + z.engagement_score;
+      div.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showZonePopup(z, e.clientX, e.clientY);
+      });
+      container.appendChild(div);
 
-      // Label for zones with high engagement
+      // Label for hot zones
       if (z.engagement_score > maxScore * 0.6) {
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 9px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(z.clicks + ' clics', zx + zw / 2, zy + zh / 2 + 8);
+        var lbl = document.createElement('span');
+        lbl.style.cssText = 'position:absolute;left:' + (zx + zw / 2) + 'px;top:' + (zy + zh / 2 - 4) + 'px;transform:translate(-50%,-50%);color:#fff;font:bold 9px sans-serif;pointer-events:none;text-shadow:0 0 3px rgba(0,0,0,0.6);';
+        lbl.textContent = z.clicks + ' clics';
+        container.appendChild(lbl);
       }
     });
   } catch(e) { console.error('renderZones error:', e); document.getElementById('dataCount').textContent = 'Erreur: ' + e.message; }
+}
+
+function showZonePopup(z, cx, cy) {
+  var el = document.getElementById('zonePopup');
+  var wrap = document.getElementById('heatmapWrap');
+  var rect = wrap.getBoundingClientRect();
+  var left = cx - rect.left + 12;
+  var top = cy - rect.top - 10;
+  if (left + 200 > rect.width) left = rect.width - 210;
+  if (top < 0) top = 10;
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+  document.getElementById('zonePopupBody').innerHTML =
+    '<table>' +
+    '<tr><td>Position</td><td>' + z.x + '%, ' + z.y + '%</td></tr>' +
+    '<tr><td>Clics</td><td>' + z.clicks + '</td></tr>' +
+    '<tr><td>Mouvements</td><td>' + z.moves + '</td></tr>' +
+    '<tr><td>Touches</td><td>' + z.touches + '</td></tr>' +
+    '<tr><td>Tot. interactions</td><td>' + (z.interaction_total || (z.clicks + z.moves + z.touches)) + '</td></tr>' +
+    '<tr><td>Dead clicks</td><td style="color:#888">' + (z.dead || 0) + '</td></tr>' +
+    '<tr><td>Rage clicks</td><td style="color:#c0392b">' + (z.rage || 0) + '</td></tr>' +
+    '<tr><td>Sessions</td><td>' + z.sessions + '</td></tr>' +
+    '<tr><td>Score engagement</td><td style="color:#4A90D9">' + z.engagement_score + '</td></tr>' +
+    '</table>';
+  el.style.display = '';
+}
+
+function closeZonePopup() {
+  document.getElementById('zonePopup').style.display = 'none';
 }
 
 function drawOverlay() {
