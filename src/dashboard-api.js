@@ -105,6 +105,19 @@ async function getHeatmapData(req, res) {
   res.json(result);
 }
 
+async function getVisitorLocations(req, res) {
+  const siteId = req.query.site_id || 1;
+  const supabase = db.getClient();
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('active_sessions')
+    .select('session_id, page, referrer, country, city, lat, lon')
+    .eq('site_id', siteId)
+    .gte('last_ping', fiveMinAgo);
+  if (error) return res.json([]);
+  res.json(data || []);
+}
+
 async function getSites(req, res) {
   const supabase = db.getClient();
   const { data } = await supabase.from('sites').select('id, name, domain, api_key, created_at').order('id', { ascending: true });
@@ -123,4 +136,4 @@ async function createSite(req, res) {
   res.json(data[0]);
 }
 
-module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getSites, createSite };
+module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getVisitorLocations, getSites, createSite };

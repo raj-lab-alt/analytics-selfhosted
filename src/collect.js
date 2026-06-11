@@ -1,5 +1,6 @@
 const db = require('./db');
 const crypto = require('crypto');
+const geoip = require('./geoip');
 
 function hashIP(ip) {
   return crypto.createHash('sha256').update(ip + 'analytics-salt-2024').digest('hex').substring(0, 16);
@@ -32,7 +33,8 @@ async function collect(req, res) {
   const ip = req.headers['x-forwarded-for'] || req.ip || '0.0.0.0';
   const ua = req.headers['user-agent'] || '';
   const ipHash = hashIP(ip);
-  const country = '';
+
+  const geo = await geoip.lookup(ip);
 
   const supabase = db.getClient();
 
@@ -42,7 +44,10 @@ async function collect(req, res) {
       site_id,
       page: url || '/',
       referrer: referrer || '',
-      country,
+      country: geo.country,
+      city: geo.city,
+      lat: geo.lat,
+      lon: geo.lon,
       ua,
       last_ping: new Date().toISOString(),
     }, { onConflict: 'session_id' });
@@ -69,7 +74,8 @@ async function collect(req, res) {
 
   buffer.push({
     site_id, api_key: apiKey, page: url || '/', referrer: referrer || '', ua, ip_hash: ipHash,
-    country, city: '', screen_w: screen_w || 0, screen_h: screen_h || 0,
+    country: geo.country, city: geo.city, lat: geo.lat, lon: geo.lon,
+    screen_w: screen_w || 0, screen_h: screen_h || 0,
     session_id, event_type: event_type || 'pageview', created_at: new Date().toISOString(),
   });
   bufferSize++;
