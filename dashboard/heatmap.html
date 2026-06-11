@@ -6,7 +6,7 @@
 <title>Heatmap - Analytics</title>
 <link rel="stylesheet" href="/assets/dashboard.css">
 <script src="https://cdn.jsdelivr.net/npm/heatmapjs@2.0.2/build/heatmap.min.js"></script>
-<style>#heatmapCanvas { width: 100%; height: 800px; border: 1px solid #ccc; position: relative; background: #fafafa; }</style>
+<style>#heatmapCanvas { width:100%; height:800px; border:1px solid #ccc; position:relative; background:#fafafa; }</style>
 </head>
 <body>
 <nav class="nav">
@@ -22,10 +22,10 @@
     <select id="siteSelect" onchange="changeSite(this.value)" class="input"></select>
   </div>
   <h1>Click Heatmap</h1>
-  <div class="card">
-    <label>Page URL:</label>
-    <input type="text" id="pageUrl" value="/" class="input">
-    <button onclick="loadHeatmap()" class="btn">Load</button>
+  <div class="card" style="margin-bottom:16px">
+    <label>Page :</label>
+    <select id="pageSelect" onchange="loadHeatmap()" class="input" style="width:400px"></select>
+    <span id="clickCount" style="margin-left:12px;color:#888;font-size:13px"></span>
   </div>
   <div id="heatmapCanvas"></div>
 </main>
@@ -41,23 +41,38 @@ async function loadSites() {
   const sites = await r.json();
   const sel = document.getElementById('siteSelect');
   sel.innerHTML = sites.map(s => `<option value="${s.id}" ${s.id == siteId ? 'selected' : ''}>${s.name} (${s.domain})</option>`).join('');
+  await loadPages();
 }
 
 function changeSite(val) {
   siteId = parseInt(val);
   localStorage.setItem('analytics_site_id', siteId);
+  loadPages();
+}
+
+async function loadPages() {
+  const sel = document.getElementById('pageSelect');
+  sel.innerHTML = '<option value="">Chargement...</option>';
+  try {
+    const r = await api('/api/top-pages?site_id=' + siteId + '&days=30');
+    const pages = await r.json();
+    sel.innerHTML = pages.map(p => '<option value="' + p.page.replace(/"/g, '&quot;') + '">' + p.page + ' (' + p.vues + ' vues)</option>').join('');
+  } catch(e) {}
   loadHeatmap();
 }
 
 function loadHeatmap() {
-  const pageUrl = document.getElementById('pageUrl').value;
+  const pageUrl = document.getElementById('pageSelect').value;
+  if (!pageUrl) return;
   api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl))
     .then(r => r.json()).then(data => {
+      document.getElementById('clickCount').textContent = data.length + ' clics';
       const container = document.getElementById('heatmapCanvas');
       container.innerHTML = '';
+      if (data.length === 0) { container.innerHTML = '<p style="padding:40px;text-align:center;color:#888">Aucun clic sur cette page. Ajoute data-heatmap="true" à ton script tracker.</p>'; return; }
       const w = container.offsetWidth || 1200;
       const h = 800;
-      var heat = h337.create({ container, radius: 25, blur: .85 });
+      var heat = h337.create({ container, radius: 20, blur: .85 });
       var max = 0;
       data.forEach(d => { if (d.count > max) max = d.count; });
       var points = data.map(d => ({ x: Math.round(d.x * w / 1920), y: Math.round(d.y * h / 1080), value: d.count }));
@@ -66,7 +81,6 @@ function loadHeatmap() {
 }
 
 loadSites();
-loadHeatmap();
 </script>
 </body>
 </html>
