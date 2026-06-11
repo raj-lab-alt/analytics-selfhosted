@@ -88,7 +88,9 @@ async function createSite(req, res) {
   if (!name || !domain) return res.status(400).json({ error: 'name and domain required' });
   const apiKey = require('crypto').randomBytes(16).toString('hex');
   const supabase = db.getClient();
-  const { data, error } = await supabase.from('sites').insert({ name, domain, api_key: apiKey }).select();
+  const { data: maxSite } = await supabase.from('sites').select('id').order('id', { ascending: false }).limit(1);
+  const nextId = (maxSite?.[0]?.id || 0) + 1;
+  const { data, error } = await supabase.from('sites').insert({ id: nextId, name, domain, api_key: apiKey }).select();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data[0]);
 }
