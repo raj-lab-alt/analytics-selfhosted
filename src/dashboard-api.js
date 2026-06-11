@@ -24,12 +24,25 @@ async function getOverview(req, res) {
   const supabase = db.getClient();
   const startDate = new Date(Date.now() - days * 86400000).toISOString();
 
-  const { data: events } = await supabase
-    .from('raw_events')
-    .select('created_at, session_id, ip_hash')
-    .eq('site_id', siteId)
-    .eq('event_type', 'pageview')
-    .gte('created_at', startDate);
+  let events;
+  try {
+    const r = await supabase
+      .from('raw_events')
+      .select('created_at, session_id, ip_hash')
+      .eq('site_id', siteId)
+      .eq('event_type', 'pageview')
+      .gte('created_at', startDate);
+    if (r.error) throw r.error;
+    events = r.data || [];
+  } catch (e) {
+    // Fallback: event_type column may not exist yet (migrate.sql not run)
+    const r = await supabase
+      .from('raw_events')
+      .select('created_at, session_id, ip_hash')
+      .eq('site_id', siteId)
+      .gte('created_at', startDate);
+    events = r.data || [];
+  }
 
   const byDay = {};
   (events || []).forEach(e => {
