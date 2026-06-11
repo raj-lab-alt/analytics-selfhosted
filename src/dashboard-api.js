@@ -22,40 +22,27 @@ async function getOverview(req, res) {
   const siteId = req.query.site_id || 1;
   const days = parseInt(req.query.days) || 7;
   const supabase = db.getClient();
-  const startDate = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const startDate = new Date(Date.now() - days * 86400000).toISOString();
 
-  // Get aggregated daily data (yesterday and older)
-  const { data: daily } = await supabase
-    .from('stats_daily')
-    .select('jour, pages_vues, visiteurs, sessions')
-    .eq('site_id', siteId)
-    .gte('jour', startDate)
-    .order('jour', { ascending: true });
-
-  // Get today's raw data
-  const today = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  const { data: todayEvents } = await supabase
+  const { data: events } = await supabase
     .from('raw_events')
-    .select('session_id, ip_hash')
+    .select('created_at, session_id, ip_hash')
     .eq('site_id', siteId)
     .eq('event_type', 'pageview')
-    .gte('created_at', today)
-    .lt('created_at', tomorrow);
+    .gte('created_at', startDate);
 
-  const result = daily || [];
+  const byDay = {};
+  (events || []).forEach(e => {
+    const day = e.created_at.slice(0, 10);
+    if (!byDay[day]) byDay[day] = { jour: day, pages_vues: 0, visiteurs: new Set(), sessions: new Set() };
+    byDay[day].pages_vues++;
+    byDay[day].visiteurs.add(e.ip_hash);
+    byDay[day].sessions.add(e.session_id);
+  });
 
-  if (todayEvents && todayEvents.length > 0) {
-    const sessions = new Set();
-    const visitors = new Set();
-    todayEvents.forEach(e => { sessions.add(e.session_id); visitors.add(e.ip_hash); });
-    result.push({
-      jour: today,
-      pages_vues: todayEvents.length,
-      visiteurs: visitors.size,
-      sessions: sessions.size,
-    });
-  }
+  const result = Object.values(byDay)
+    .map(d => ({ jour: d.jour, pages_vues: d.pages_vues, visiteurs: d.visiteurs.size, sessions: d.sessions.size }))
+    .sort((a, b) => a.jour.localeCompare(b.jour));
 
   res.json(result);
 }

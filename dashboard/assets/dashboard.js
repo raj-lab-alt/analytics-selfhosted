@@ -19,81 +19,119 @@ function changeSite(val) {
   loadOverview(parseInt(document.querySelector('.chart-controls button.active')?.dataset?.days) || 7);
 }
 
-async function loadOverview(days) {
-  document.querySelectorAll('.chart-controls button').forEach(b => b.classList.toggle('active', b.dataset.days == days));
+async function loadOverview(selectedDays) {
+  document.querySelectorAll('.chart-controls button').forEach(b => b.classList.toggle('active', b.dataset.days == selectedDays));
 
-  const overview = await (await api('/api/overview?site_id=' + siteId + '&days=' + days)).json();
+  // Always fetch 90 days so totals are accurate regardless of chart selection
+  const overview = await (await api('/api/overview?site_id=' + siteId + '&days=90')).json();
 
+  // Chart: show only selected period
   if (chart) chart.destroy();
+  const chartData = overview.slice(-selectedDays);
   const ctx = document.getElementById('overviewChart').getContext('2d');
   chart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: overview.map(r => r.jour?.slice(5)),
+      labels: chartData.map(r => {
+        var d = r.jour || '';
+        return d.slice(5) + '/' + d.slice(2, 4);
+      }),
       datasets: [
-        { label: 'Page Views', data: overview.map(r => r.pages_vues), backgroundColor: '#4e73df' },
-        { label: 'Visitors', data: overview.map(r => r.visiteurs), backgroundColor: '#1cc88a' }
+        { label: 'Pages vues', data: chartData.map(r => r.pages_vues), backgroundColor: '#4e73df' },
+        { label: 'Visiteurs', data: chartData.map(r => r.visiteurs), backgroundColor: '#1cc88a' }
       ]
     },
-    options: { responsive: true, plugins: { legend: { position: 'top' } } }
+    options: {
+      responsive: true,
+      plugins: { legend: { position: 'top' } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
   });
 
-  const today = overview[overview.length - 1] || {};
+  // Stats cards from full data
+  var today = overview[overview.length - 1] || {};
   document.getElementById('todayViews').textContent = today.pages_vues || 0;
 
-  const total7 = overview.slice(-7).reduce((s, r) => s + r.pages_vues, 0);
+  var total7 = overview.slice(-7).reduce(function(s, r) { return s + r.pages_vues; }, 0);
   document.getElementById('weekViews').textContent = total7;
 
-  const total30 = overview.slice(-30).reduce((s, r) => s + r.pages_vues, 0);
+  var total30 = overview.slice(-30).reduce(function(s, r) { return s + r.pages_vues; }, 0);
   document.getElementById('monthViews').textContent = total30;
 
-  const stats = await (await api('/api/stats?site_id=' + siteId + '&days=' + days)).json();
-  document.getElementById('avgVisit').textContent = stats.avgDuration + 's';
+  // Avg visit duration & top city (use selectedDays for these)
+  try {
+    var stats = await (await api('/api/stats?site_id=' + siteId + '&days=' + selectedDays)).json();
+    document.getElementById('avgVisit').textContent = (stats.avgDuration || 0) + 's';
+  } catch(e) { document.getElementById('avgVisit').textContent = '—'; }
 
-  const topCities = await (await api('/api/top-cities?site_id=' + siteId + '&days=' + days)).json();
-  document.getElementById('topCity').textContent = topCities[0] ? topCities[0].location : '-';
+  try {
+    var topCities = await (await api('/api/top-cities?site_id=' + siteId + '&days=' + selectedDays)).json();
+    document.getElementById('topCity').textContent = topCities[0] ? topCities[0].location : '—';
+  } catch(e) { document.getElementById('topCity').textContent = '—'; }
 
-  const topPages = await (await api('/api/top-pages?site_id=' + siteId + '&days=' + days)).json();
-  document.getElementById('topPages').innerHTML =
-    '<table><thead><tr><th>Page</th><th>Views</th></tr></thead><tbody>' +
-    topPages.map(p => '<tr><td>' + p.page + '</td><td>' + p.vues + '</td></tr>').join('') + '</tbody></table>';
+  // Top Pages
+  try {
+    var topPages = await (await api('/api/top-pages?site_id=' + siteId + '&days=' + selectedDays)).json();
+    document.getElementById('topPages').innerHTML =
+      '<table><thead><tr><th>Page</th><th>Vues</th></tr></thead><tbody>' +
+      (topPages.length ? topPages.map(function(p) { return '<tr><td>' + esc(p.page) + '</td><td>' + p.vues + '</td></tr>'; }).join('') : '<tr><td colspan="2" style="color:#888">Aucune donnée</td></tr>') +
+      '</tbody></table>';
+  } catch(e) { document.getElementById('topPages').innerHTML = '<p style="color:#888">Erreur de chargement</p>'; }
 
-  const topSources = await (await api('/api/top-sources?site_id=' + siteId + '&days=' + days)).json();
-  document.getElementById('topSources').innerHTML =
-    '<table><thead><tr><th>Source</th><th>Views</th></tr></thead><tbody>' +
-    topSources.map(s => '<tr><td>' + (s.referrer || '(direct)') + '</td><td>' + s.vues + '</td></tr>').join('') + '</tbody></table>';
+  // Top Sources
+  try {
+    var topSources = await (await api('/api/top-sources?site_id=' + siteId + '&days=' + selectedDays)).json();
+    document.getElementById('topSources').innerHTML =
+      '<table><thead><tr><th>Source</th><th>Vues</th></tr></thead><tbody>' +
+      (topSources.length ? topSources.map(function(s) { return '<tr><td>' + esc(s.referrer || '(direct)') + '</td><td>' + s.vues + '</td></tr>'; }).join('') : '<tr><td colspan="2" style="color:#888">Aucune donnée</td></tr>') +
+      '</tbody></table>';
+  } catch(e) { document.getElementById('topSources').innerHTML = '<p style="color:#888">Erreur de chargement</p>'; }
 
-  const traffic = await (await api('/api/traffic-sources?site_id=' + siteId + '&days=' + days)).json();
-  const typeColors = { direct: '#858796', organic: '#1cc88a', social: '#4e73df', paid: '#e74a3b', referral: '#f6c23e' };
-  document.getElementById('trafficGrid').innerHTML = traffic.map(t =>
-    '<div class="traffic-card" style="border-left:4px solid ' + (typeColors[t.type] || '#858796') + '" title="' + t.type + '">' +
-      '<h3>' + t.source + '</h3>' +
-      '<p class="traffic-count">' + t.count + '</p>' +
-      '<p class="traffic-pct">' + t.pct + '%</p>' +
-    '</div>'
-  ).join('');
+  // Traffic sources
+  try {
+    var traffic = await (await api('/api/traffic-sources?site_id=' + siteId + '&days=' + selectedDays)).json();
+    var typeColors = { direct: '#858796', organic: '#1cc88a', social: '#4e73df', paid: '#e74a3b', referral: '#f6c23e' };
+    document.getElementById('trafficGrid').innerHTML = traffic.length ? traffic.map(function(t) {
+      return '<div class="traffic-card" style="border-left:4px solid ' + (typeColors[t.type] || '#858796') + '" title="' + t.type + '">' +
+        '<h3>' + esc(t.source) + '</h3>' +
+        '<p class="traffic-count">' + t.count + '</p>' +
+        '<p class="traffic-pct">' + t.pct + '%</p>' +
+      '</div>';
+    }).join('') : '<p style="color:#888;padding:12px">Aucune donnée de trafic</p>';
+  } catch(e) { document.getElementById('trafficGrid').innerHTML = '<p style="color:#888">Erreur</p>'; }
 
-  const platforms = await (await api('/api/platforms?site_id=' + siteId + '&days=' + days)).json();
-  document.getElementById('platformDevices').innerHTML = '<table>' + platforms.devices.map(d =>
-    '<tr><td>' + d.label.charAt(0).toUpperCase() + d.label.slice(1) + '</td><td>' + d.pct + '%</td></tr>'
-  ).join('') + '</table>';
-  document.getElementById('platformBrowsers').innerHTML = '<table>' + platforms.browsers.map(b =>
-    '<tr><td>' + b.label + '</td><td>' + b.pct + '%</td></tr>'
-  ).join('') + '</table>';
-  document.getElementById('platformOS').innerHTML = '<table>' + platforms.os.map(o =>
-    '<tr><td>' + o.label + '</td><td>' + o.pct + '%</td></tr>'
-  ).join('') + '</table>';
+  // Platforms
+  try {
+    var platforms = await (await api('/api/platforms?site_id=' + siteId + '&days=' + selectedDays)).json();
+    document.getElementById('platformDevices').innerHTML = platforms.devices.length ? '<table>' + platforms.devices.map(function(d) {
+      return '<tr><td>' + d.label.charAt(0).toUpperCase() + d.label.slice(1) + '</td><td>' + d.pct + '%</td></tr>';
+    }).join('') + '</table>' : '<p style="color:#888">Aucune donnée</p>';
+    document.getElementById('platformBrowsers').innerHTML = platforms.browsers.length ? '<table>' + platforms.browsers.map(function(b) {
+      return '<tr><td>' + esc(b.label) + '</td><td>' + b.pct + '%</td></tr>';
+    }).join('') + '</table>' : '<p style="color:#888">Aucune donnée</p>';
+    document.getElementById('platformOS').innerHTML = platforms.os.length ? '<table>' + platforms.os.map(function(o) {
+      return '<tr><td>' + esc(o.label) + '</td><td>' + o.pct + '%</td></tr>';
+    }).join('') + '</table>' : '<p style="color:#888">Aucune donnée</p>';
+  } catch(e) {
+    document.getElementById('platformDevices').innerHTML = '<p style="color:#888">Erreur</p>';
+    document.getElementById('platformBrowsers').innerHTML = '<p style="color:#888">Erreur</p>';
+    document.getElementById('platformOS').innerHTML = '<p style="color:#888">Erreur</p>';
+  }
 }
+
+function esc(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 document.addEventListener('DOMContentLoaded', function() {
   loadSites();
   loadOverview(7);
-  document.querySelectorAll('.chart-controls button').forEach(b => {
+  document.querySelectorAll('.chart-controls button').forEach(function(b) {
     b.addEventListener('click', function() { loadOverview(parseInt(this.dataset.days)); });
   });
+  // Active count polling
   setInterval(function() {
-    api('/api/realtime?site_id=' + siteId).then(r => r.json()).then(d => {
-      document.getElementById('activeCount').textContent = d.active;
+    api('/api/realtime?site_id=' + siteId).then(function(r) { return r.json(); }).then(function(d) {
+      var el = document.getElementById('activeCount');
+      if (el) el.textContent = d.active;
     });
   }, 10000);
 });
