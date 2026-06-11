@@ -12,10 +12,6 @@ ALTER TABLE raw_events ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(200) DEFAUL
 ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS x_ratio REAL DEFAULT 0;
 ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS y_ratio REAL DEFAULT 0;
 ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS doc_height REAL DEFAULT 0;
-ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS device_type VARCHAR(10) DEFAULT '';
-ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS utm_source VARCHAR(100) DEFAULT '';
-ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS utm_medium VARCHAR(100) DEFAULT '';
-ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(200) DEFAULT '';
 ALTER TABLE heatmap_events DROP CONSTRAINT IF EXISTS heatmap_events_event_type_check;
 ALTER TABLE heatmap_events ADD CONSTRAINT heatmap_events_event_type_check CHECK (event_type IN ('click','move','touch','scroll'));
 
@@ -103,3 +99,4 @@ ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS device_type VARCHAR(10) DEF
 ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS utm_source VARCHAR(100) DEFAULT '';
 ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS utm_medium VARCHAR(100) DEFAULT '';
 ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(200) DEFAULT '';
+ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS device_type VARCHAR(10) DEFAULT '';

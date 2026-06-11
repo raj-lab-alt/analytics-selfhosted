@@ -6,33 +6,16 @@ function pageLikePattern(raw) {
   return path.replace(/\*/g, '%').replace(/_/g, '\\_') + (path.includes('*') ? '' : '%');
 }
 
-/**
- * Apply rich filters (device_type, utm, date range) to a Supabase query.
- * @param {object} supabase - client (unused, kept for sig)
- * @param {object} q - Supabase query builder
- * @param {object} req - Express request (query params read here)
- * @param {string[]} filterCols - column names to filter: 'device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at'
- * @returns {object} modified query
- */
-function applyFilters(q, req, filterCols) {
-  const f = req.query;
-  if (filterCols.includes('device_type') && f.device_type && f.device_type !== 'all') {
-    q = q.eq('device_type', f.device_type);
-  }
-  if (filterCols.includes('utm_source') && f.utm_source) {
-    q = q.like('utm_source', '%' + f.utm_source.replace(/%/g, '\\%') + '%');
-  }
-  if (filterCols.includes('utm_medium') && f.utm_medium) {
-    q = q.like('utm_medium', '%' + f.utm_medium.replace(/%/g, '\\%') + '%');
-  }
-  if (filterCols.includes('utm_campaign') && f.utm_campaign) {
-    q = q.like('utm_campaign', '%' + f.utm_campaign.replace(/%/g, '\\%') + '%');
-  }
-  if (filterCols.includes('created_at')) {
-    if (f.date_from) q = q.gte('created_at', f.date_from);
-    if (f.date_to) q = q.lte('created_at', f.date_to + 'T23:59:59Z');
-  }
-  return q;
+function applyFilters(query, req, opts) {
+  const deviceType = req.query.device_type;
+  const utmSource = req.query.utm_source;
+  const dateFrom = req.query.date_from;
+  const dateTo = req.query.date_to;
+  if (deviceType && opts && opts.device) query = query.eq('device_type', deviceType);
+  if (utmSource && opts && opts.utm) query = query.eq('utm_source', utmSource);
+  if (dateFrom) query = query.gte('created_at', dateFrom);
+  if (dateTo) query = query.lte('created_at', dateTo);
+  return query;
 }
 
 async function getOverview(req, res) {
@@ -136,8 +119,8 @@ async function getHeatmapData(req, res) {
     .select('x, y, viewport_w, viewport_h, scroll_y, x_ratio, y_ratio, doc_height')
     .eq('site_id', siteId)
     .like('page_url', likePattern);
-  query = applyFilters(query, req, ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']);
   if (viewportAccuracy > 0) {
+    // Include events from viewports within tolerance (width diff)
     const minW = Math.max(320, 1920 - viewportAccuracy * 100);
     const maxW = 1920 + viewportAccuracy * 100;
     query = query.gte('viewport_w', minW).lte('viewport_w', maxW);
@@ -147,6 +130,7 @@ async function getHeatmapData(req, res) {
   } else {
     query = query.eq('event_type', filterType);
   }
+  query = applyFilters(query, req, { device: true });
   const { data } = await query;
   const items = (data || []).map(e => {
     if (e.x_ratio && e.y_ratio && e.doc_height) {
@@ -392,7 +376,7 @@ async function getHeatmapCtas(req, res) {
   const page = req.query.page || '';
   let q = supabase.from('heatmap_clicks').select('cta_name, session_id').eq('site_id', siteId).eq('is_cta', true).neq('cta_name', '');
   if (page) q = q.like('page_url', pageLikePattern(page));
-  q = applyFilters(q, req, ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']);
+  q = applyFilters(q, req, { device: true, utm: true });
   const { data } = await q;
   const groups = {};
   const sessionPerCta = {};
@@ -414,7 +398,7 @@ async function getHeatmapForms(req, res) {
   const page = req.query.page || '';
   let q = supabase.from('form_events').select('event_name, form_name').eq('site_id', siteId);
   if (page) q = q.like('page_url', pageLikePattern(page));
-  q = applyFilters(q, req, ['device_type', 'created_at']);
+  q = applyFilters(q, req, { device: true });
   const { data } = await q;
   const groups = {};
   (data || []).forEach(d => {
@@ -434,7 +418,7 @@ async function getHeatmapDeadClicks(req, res) {
   const page = req.query.page || '';
   let q = supabase.from('heatmap_clicks').select('x_percent, y_percent, session_id').eq('site_id', siteId).eq('is_dead_click', true);
   if (page) q = q.like('page_url', pageLikePattern(page));
-  q = applyFilters(q, req, ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']);
+  q = applyFilters(q, req, { device: true, utm: true });
   const { data } = await q;
   const total = data ? data.length : 0;
   // Aggregate by 5% grid
@@ -457,7 +441,7 @@ async function getHeatmapRageClicks(req, res) {
   const page = req.query.page || '';
   let q = supabase.from('heatmap_clicks').select('x_percent, y_percent, session_id').eq('site_id', siteId).eq('is_rage_click', true);
   if (page) q = q.like('page_url', pageLikePattern(page));
-  q = applyFilters(q, req, ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']);
+  q = applyFilters(q, req, { device: true, utm: true });
   const { data } = await q;
   const total = data ? data.length : 0;
   const grid = {};
@@ -479,7 +463,7 @@ async function getHeatmapScrollDistribution(req, res) {
   const page = req.query.page || '';
   let q = supabase.from('heatmap_scrolls').select('max_scroll_percent, session_id').eq('site_id', siteId);
   if (page) q = q.like('page_url', pageLikePattern(page));
-  q = applyFilters(q, req, ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']);
+  q = applyFilters(q, req, { device: true, utm: true });
   const { data } = await q;
   const total = data ? data.length : 0;
   const ranges = [
@@ -503,16 +487,15 @@ async function getHeatmapSummary(req, res) {
   function mkQuery(table, extra) {
     let q = supabase.from(table).select('*', { count: 'exact', head: true }).eq('site_id', siteId);
     if (page) q = q.like('page_url', pageLikePattern(page));
-    if (extra) q = applyFilters(q, req, extra);
+    if (extra) q = extra(q);
+    const opts = table === 'form_events' ? { device: true } : { device: true, utm: true };
+    q = applyFilters(q, req, opts);
     return q;
   }
   const [clicks, ctaClicks, deadClicks, rageClicks, scrolls, forms] = await Promise.all([
-    mkQuery('heatmap_clicks', ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']),
-    mkQuery('heatmap_clicks', ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']).eq('is_cta', true).neq('cta_name', ''),
-    mkQuery('heatmap_clicks', ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']).eq('is_dead_click', true),
-    mkQuery('heatmap_clicks', ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']).eq('is_rage_click', true),
-    mkQuery('heatmap_scrolls', ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']),
-    mkQuery('form_events', ['device_type', 'created_at']),
+    mkQuery('heatmap_clicks'), mkQuery('heatmap_clicks', q => q.eq('is_cta', true).neq('cta_name', '')),
+    mkQuery('heatmap_clicks', q => q.eq('is_dead_click', true)), mkQuery('heatmap_clicks', q => q.eq('is_rage_click', true)),
+    mkQuery('heatmap_scrolls'), mkQuery('form_events'),
   ]);
   const sessions = scrolls.count || 0;
   res.json({
@@ -533,7 +516,7 @@ async function getHeatmapClickmap(req, res) {
   const supabase = db.getClient();
   let q = supabase.from('heatmap_clicks').select('element_tag, element_id, element_class, cta_name, is_cta, is_dead_click, is_rage_click, x_percent, y_percent').eq('site_id', siteId);
   if (page) q = q.like('page_url', pageLikePattern(page));
-  q = applyFilters(q, req, ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']);
+  q = applyFilters(q, req, { device: true, utm: true });
   const { data } = await q;
   const groups = {};
   (data || []).forEach(d => {
@@ -562,7 +545,7 @@ async function getHeatmapFormFunnel(req, res) {
   const supabase = db.getClient();
   let q = supabase.from('form_events').select('form_name, event_name, field_order, session_id').eq('site_id', siteId);
   if (page) q = q.like('page_url', pageLikePattern(page));
-  q = applyFilters(q, req, ['device_type', 'created_at']);
+  q = applyFilters(q, req, { device: true });
   const { data } = await q || {};
   const funnels = {};
   (data || []).forEach(d => {
@@ -601,7 +584,7 @@ async function getHeatmapProblemRanking(req, res) {
   const supabase = db.getClient();
   let q = supabase.from('heatmap_clicks').select('element_tag, element_id, element_class, cta_name, is_cta, is_dead_click, is_rage_click, x_percent, y_percent').eq('site_id', siteId);
   if (page) q = q.like('page_url', pageLikePattern(page));
-  q = applyFilters(q, req, ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']);
+  q = applyFilters(q, req, { device: true, utm: true });
   const { data } = await q || {};
   const groups = {};
   (data || []).forEach(d => {
@@ -623,36 +606,36 @@ async function getHeatmapProblemRanking(req, res) {
 async function getHeatmapEngagementZones(req, res) {
   const siteId = req.query.site_id || 1;
   const page = req.query.page || '';
-  const gridSize = parseInt(req.query.grid) || 5;
+  const gridSize = parseInt(req.query.grid) || 5; // grid cell size in percent
   const supabase = db.getClient();
   const likePattern = pageLikePattern(page);
 
   // Get click/move/touch events
-  let evQuery = supabase
+  let eventsQuery = supabase
     .from('heatmap_events')
     .select('event_type, x_ratio, y_ratio, session_id')
     .eq('site_id', siteId)
     .like('page_url', likePattern);
-  evQuery = applyFilters(evQuery, req, ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']);
-  const { data: events } = await evQuery;
+  eventsQuery = applyFilters(eventsQuery, req, { device: true });
+  const { data: events } = await eventsQuery;
 
   // Get enriched clicks
-  let clQuery = supabase
+  let clicksQuery = supabase
     .from('heatmap_clicks')
     .select('x_percent, y_percent, session_id, is_dead_click, is_rage_click')
     .eq('site_id', siteId)
     .like('page_url', likePattern);
-  clQuery = applyFilters(clQuery, req, ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']);
-  const { data: clicks } = await clQuery;
+  clicksQuery = applyFilters(clicksQuery, req, { device: true, utm: true });
+  const { data: clicks } = await clicksQuery;
 
   // Get scroll data
-  let scQuery = supabase
+  let scrollsQuery = supabase
     .from('heatmap_scrolls')
     .select('max_scroll_percent, session_id')
     .eq('site_id', siteId)
     .like('page_url', likePattern);
-  scQuery = applyFilters(scQuery, req, ['device_type', 'utm_source', 'utm_medium', 'utm_campaign', 'created_at']);
-  const { data: scrolls } = await scQuery;
+  scrollsQuery = applyFilters(scrollsQuery, req, { device: true, utm: true });
+  const { data: scrolls } = await scrollsQuery;
 
   const zones = {};
   function zoneKey(bx, by) { return bx + 'x' + by; }
