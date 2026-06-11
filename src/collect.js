@@ -30,7 +30,8 @@ async function collect(req, res) {
   const { site_id, url, referrer, screen_w, screen_h, session_id, event_type, x, y, viewport_w, viewport_h, scroll_y } = req.body;
   if (!site_id || !session_id) return res.json({ ok: false, error: 'missing fields' });
 
-  const ip = req.headers['x-forwarded-for'] || req.ip || '0.0.0.0';
+  const rawIp = req.headers['x-forwarded-for'] || req.ip || '0.0.0.0';
+  const ip = rawIp.split(',')[0].trim();
   const ua = req.headers['user-agent'] || '';
   const ipHash = hashIP(ip);
 
