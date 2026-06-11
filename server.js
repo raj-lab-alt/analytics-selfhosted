@@ -158,7 +158,7 @@ setupWebSocket(wss);
 // Run aggregation on startup then periodically
 aggregateDaily();
 aggregateHourly();
-cleanupStaleSessions();
+setTimeout(() => cleanupStaleSessions(), 60000);
 setInterval(() => aggregateHourly(), 3600000);
 setInterval(() => aggregateDaily(), 86400000);
 setInterval(() => cleanup(), 3600000);
