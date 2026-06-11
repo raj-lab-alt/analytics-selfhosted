@@ -15,6 +15,13 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: '50kb' }));
+app.use('/collect', (req, res, next) => {
+  if (req.is('text/plain')) {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => { try { req.body = JSON.parse(body); } catch(e) {} next(); });
+  } else next();
+});
 app.use(express.static(path.join(__dirname, 'dashboard')));
 
 app.use((req, res, next) => {
