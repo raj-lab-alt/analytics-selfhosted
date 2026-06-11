@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS sites (
 CREATE TABLE IF NOT EXISTS raw_events (
   id BIGSERIAL PRIMARY KEY,
   site_id INT NOT NULL,
-  api_key VARCHAR(32) NOT NULL,
+  api_key VARCHAR(32) DEFAULT '',
   page VARCHAR(500) NOT NULL,
   referrer VARCHAR(500) DEFAULT '',
   ua TEXT,
@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS raw_events (
   screen_w INT DEFAULT 0,
   screen_h INT DEFAULT 0,
   session_id VARCHAR(36) NOT NULL,
+  event_type VARCHAR(10) DEFAULT 'pageview',
   created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_raw_site_created ON raw_events (site_id, created_at);

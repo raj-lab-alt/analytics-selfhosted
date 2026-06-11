@@ -1,0 +1,3 @@
+ALTER TABLE raw_events ADD COLUMN IF NOT EXISTS event_type VARCHAR(10) DEFAULT 'pageview';
+ALTER TABLE raw_events ALTER COLUMN api_key SET DEFAULT '';
+ALTER TABLE raw_events ALTER COLUMN api_key DROP NOT NULL;

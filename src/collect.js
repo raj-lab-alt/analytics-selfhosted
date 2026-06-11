@@ -48,6 +48,12 @@ async function collect(req, res) {
     }, { onConflict: 'session_id' });
   } catch (e) {}
 
+  let apiKey = '';
+  try {
+    const { data: site } = await supabase.from('sites').select('api_key').eq('id', site_id).maybeSingle();
+    if (site) apiKey = site.api_key;
+  } catch (e) {}
+
   if (event_type === 'click' || event_type === 'move' || event_type === 'scroll') {
     try {
       await supabase.from('heatmap_events').insert({
@@ -62,7 +68,7 @@ async function collect(req, res) {
   }
 
   buffer.push({
-    site_id, page: url || '/', referrer: referrer || '', ua, ip_hash: ipHash,
+    site_id, api_key: apiKey, page: url || '/', referrer: referrer || '', ua, ip_hash: ipHash,
     country, city: '', screen_w: screen_w || 0, screen_h: screen_h || 0,
     session_id, event_type: event_type || 'pageview', created_at: new Date().toISOString(),
   });
