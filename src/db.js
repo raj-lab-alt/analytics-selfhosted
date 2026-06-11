@@ -1,42 +1,18 @@
-const { Pool } = require('pg');
+const { createClient } = require('@supabase/supabase-js');
 
-let pool;
+let supabase;
 
-function buildConnectionString() {
-  if (process.env.DATABASE_URL) {
-    return process.env.DATABASE_URL;
+function getClient() {
+  if (!supabase) {
+    const url = process.env.SUPABASE_URL || '';
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+    supabase = createClient(url, key);
   }
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    const host = new URL(process.env.SUPABASE_URL).hostname;
-    return `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_SERVICE_ROLE_KEY)}@${host}:6543/postgres?pgbouncer=true`;
-  }
-  return `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || ''}@${process.env.DB_HOST || 'localhost'}:5432/${process.env.DB_NAME || 'analytics'}`;
-}
-
-async function getPool() {
-  if (!pool) {
-    const connStr = buildConnectionString();
-    const isRemote = !connStr.includes('localhost') && !connStr.includes('127.0.0.1');
-    pool = new Pool({
-      connectionString: connStr,
-      max: 5,
-      connectionTimeoutMillis: 15000,
-      ssl: isRemote ? { rejectUnauthorized: false } : undefined,
-    });
-  }
-  return pool;
+  return supabase;
 }
 
 async function query(sql, params) {
-  const p = await getPool();
-  const result = await p.query(sql, params);
-  return result.rows;
+  throw new Error('Raw SQL not supported via Supabase REST API. Use db.query() only for install.');
 }
 
-async function insert(sql, params) {
-  const p = await getPool();
-  const result = await p.query(sql, params);
-  return result;
-}
-
-module.exports = { query, insert, getPool };
+module.exports = { getClient, query };

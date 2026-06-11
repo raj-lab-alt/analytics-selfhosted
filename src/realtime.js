@@ -12,12 +12,15 @@ function setupWebSocket(wss) {
   setInterval(async () => {
     if (clients.size === 0) return;
     try {
-      const siteIds = [...new Set(clients.values())];
-      const rows = await db.query(
-        `SELECT site_id, COUNT(*)::int as count FROM active_sessions WHERE last_ping > NOW() - INTERVAL '5 minutes' GROUP BY site_id`
-      );
+      const supabase = db.getClient();
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('active_sessions')
+        .select('site_id')
+        .gte('last_ping', fiveMinAgo);
+      if (error) return;
       const counts = {};
-      rows.forEach(r => counts[r.site_id] = r.count);
+      data.forEach(r => { counts[r.site_id] = (counts[r.site_id] || 0) + 1; });
       for (const [ws, sid] of clients) {
         if (ws.readyState === 1) {
           ws.send(JSON.stringify({ active: counts[sid] || 0 }));
@@ -29,13 +32,16 @@ function setupWebSocket(wss) {
 
 async function getActiveSessions(req, res) {
   const siteId = req.query.site_id || 1;
-  const rows = await db.query(
-    `SELECT session_id, page, referrer, country, last_ping FROM active_sessions
-     WHERE site_id = $1 AND last_ping > NOW() - INTERVAL '5 minutes'
-     ORDER BY last_ping DESC`,
-    [siteId]
-  );
-  res.json({ sessions: rows, total: rows.length });
+  const supabase = db.getClient();
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('active_sessions')
+    .select('session_id, page, referrer, country, last_ping')
+    .eq('site_id', siteId)
+    .gte('last_ping', fiveMinAgo)
+    .order('last_ping', { ascending: false });
+  if (error) return res.json({ sessions: [], total: 0 });
+  res.json({ sessions: data, total: data.length });
 }
 
 module.exports = { setupWebSocket, getActiveSessions };

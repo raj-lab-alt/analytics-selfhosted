@@ -45,17 +45,15 @@ app.get('/install', async (req, res) => {
   if (req.query.key !== (process.env.ADMIN_PASSWORD || 'admin123')) return res.status(403).send('forbidden');
   const fs = require('fs');
   const sql = fs.readFileSync(path.join(__dirname, 'install.sql'), 'utf8');
-  const statements = sql.split(';').map(s => s.trim()).filter(Boolean);
-  let done = 0;
-  for (const stmt of statements) {
-    try {
-      await db.query(stmt);
-      done++;
-    } catch (err) {
-      return res.status(500).send(`Error on statement ${done + 1}/${statements.length}: ${err.message}`);
-    }
-  }
-  res.send(`Tables created successfully (${done}/${statements.length} statements executed)`);
+  res.send(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:800px;margin:2em auto">
+    <h1>Installation Analytics</h1>
+    <p>1. Va dans <a href="https://supabase.com/dashboard/project/aupxallaghkovsauwgcz" target="_blank">Supabase Dashboard</a></p>
+    <p>2. Ouvre <strong>SQL Editor</strong> → <strong>New Query</strong></p>
+    <p>3. Copie-colle le SQL ci-dessous et exécute-le</p>
+    <p>4. Après exécution, ajoute un site dans Supabase → <strong>Table Editor</strong> → <strong>sites</strong> → Insert row</p>
+    <pre style="background:#f4f4f4;padding:1em;overflow:auto;max-height:500px;border:1px solid #ddd">${sql.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+    <p>5. <a href="/">Retour au dashboard</a></p>
+  </body></html>`);
 });
 
 setupWebSocket(wss);

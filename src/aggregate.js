@@ -4,44 +4,68 @@ async function aggregateHourly() {
   const heure = new Date();
   heure.setMinutes(0, 0, 0);
   heure.setHours(heure.getHours() - 1);
-  const heureStr = heure.toISOString().slice(0, 19).replace('T', ' ');
-  const heureSuiv = new Date(heure.getTime() + 3600000).toISOString().slice(0, 19).replace('T', ' ');
+  const heureStr = heure.toISOString();
+  const heureSuiv = new Date(heure.getTime() + 3600000).toISOString();
 
   try {
-    const sites = await db.query('SELECT id FROM sites');
+    const supabase = db.getClient();
+    const { data: sites } = await supabase.from('sites').select('id');
+    if (!sites) return;
+
     for (const site of sites) {
-      const stats = await db.query(
-        `SELECT COUNT(*)::int as pages_vues, COUNT(DISTINCT session_id)::int as sessions,
-                COUNT(DISTINCT ip_hash)::int as visiteurs
-         FROM raw_events WHERE site_id = $1 AND event_type='pageview'
-         AND created_at >= $2 AND created_at < $3`,
-        [site.id, heureStr, heureSuiv]
-      );
+      const { data: events } = await supabase
+        .from('raw_events')
+        .select('session_id, ip_hash')
+        .eq('site_id', site.id)
+        .eq('event_type', 'pageview')
+        .gte('created_at', heureStr)
+        .lt('created_at', heureSuiv);
 
-      const topPages = await db.query(
-        `SELECT page, COUNT(*)::int as vues FROM raw_events
-         WHERE site_id = $1 AND event_type='pageview' AND created_at >= $2 AND created_at < $3
-         GROUP BY page ORDER BY vues DESC LIMIT 10`,
-        [site.id, heureStr, heureSuiv]
-      );
+      if (!events) continue;
 
-      const topSources = await db.query(
-        `SELECT referrer, COUNT(*)::int as vues FROM raw_events
-         WHERE site_id = $1 AND event_type='pageview' AND created_at >= $2 AND created_at < $3
-         GROUP BY referrer ORDER BY vues DESC LIMIT 10`,
-        [site.id, heureStr, heureSuiv]
-      );
+      const sessions = new Set();
+      const visitors = new Set();
+      events.forEach(e => { sessions.add(e.session_id); visitors.add(e.ip_hash); });
 
-      const s = stats[0] || { pages_vues: 0, sessions: 0, visiteurs: 0 };
-      await db.query(
-        `INSERT INTO stats_hourly (site_id, heure, pages_vues, visiteurs, sessions, top_pages, top_sources)
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
-         ON CONFLICT (site_id, heure) DO UPDATE SET
-         pages_vues=EXCLUDED.pages_vues, visiteurs=EXCLUDED.visiteurs,
-         sessions=EXCLUDED.sessions, top_pages=EXCLUDED.top_pages, top_sources=EXCLUDED.top_sources`,
-        [site.id, heureStr, s.pages_vues, s.visiteurs, s.sessions,
-         JSON.stringify(topPages), JSON.stringify(topSources)]
-      );
+      const { data: topPages } = await supabase
+        .from('raw_events')
+        .select('page')
+        .eq('site_id', site.id)
+        .eq('event_type', 'pageview')
+        .gte('created_at', heureStr)
+        .lt('created_at', heureSuiv);
+
+      const pageCounts = {};
+      (topPages || []).forEach(e => { pageCounts[e.page] = (pageCounts[e.page] || 0) + 1; });
+      const topPagesArr = Object.entries(pageCounts)
+        .sort((a, b) => b[1] - a[1]).slice(0, 10)
+        .map(([page, vues]) => ({ page, vues }));
+
+      const { data: topSources } = await supabase
+        .from('raw_events')
+        .select('referrer')
+        .eq('site_id', site.id)
+        .eq('event_type', 'pageview')
+        .neq('referrer', '')
+        .gte('created_at', heureStr)
+        .lt('created_at', heureSuiv);
+
+      const sourceCounts = {};
+      (topSources || []).forEach(e => { sourceCounts[e.referrer] = (sourceCounts[e.referrer] || 0) + 1; });
+      const topSourcesArr = Object.entries(sourceCounts)
+        .sort((a, b) => b[1] - a[1]).slice(0, 10)
+        .map(([referrer, vues]) => ({ referrer, vues }));
+
+      const s = { pages_vues: events.length, sessions: sessions.size, visiteurs: visitors.size };
+      await supabase.from('stats_hourly').upsert({
+        site_id: site.id,
+        heure: heureStr,
+        pages_vues: s.pages_vues,
+        visiteurs: s.visiteurs,
+        sessions: s.sessions,
+        top_pages: topPagesArr,
+        top_sources: topSourcesArr,
+      }, { onConflict: 'site_id, heure' });
     }
     console.log(`Hourly aggregation done for ${heureStr}`);
   } catch (err) {
@@ -53,43 +77,67 @@ async function aggregateDaily() {
   const hier = new Date();
   hier.setDate(hier.getDate() - 1);
   const jourStr = hier.toISOString().slice(0, 10);
-  const jourSuiv = new Date(hier.getTime() + 86400000).toISOString().slice(0, 10);
+  const jourSuiv = new Date(hier.getTime() + 86400000).toISOString();
 
   try {
-    const sites = await db.query('SELECT id FROM sites');
+    const supabase = db.getClient();
+    const { data: sites } = await supabase.from('sites').select('id');
+    if (!sites) return;
+
     for (const site of sites) {
-      const stats = await db.query(
-        `SELECT COUNT(*)::int as pages_vues, COUNT(DISTINCT session_id)::int as sessions,
-                COUNT(DISTINCT ip_hash)::int as visiteurs
-         FROM raw_events WHERE site_id = $1 AND event_type='pageview'
-         AND created_at >= $2 AND created_at < $3`,
-        [site.id, jourStr, jourSuiv]
-      );
+      const { data: events } = await supabase
+        .from('raw_events')
+        .select('session_id, ip_hash')
+        .eq('site_id', site.id)
+        .eq('event_type', 'pageview')
+        .gte('created_at', jourStr)
+        .lt('created_at', jourSuiv);
 
-      const topPages = await db.query(
-        `SELECT page, COUNT(*)::int as vues FROM raw_events
-         WHERE site_id = $1 AND event_type='pageview' AND created_at >= $2 AND created_at < $3
-         GROUP BY page ORDER BY vues DESC LIMIT 10`,
-        [site.id, jourStr, jourSuiv]
-      );
+      if (!events) continue;
 
-      const topSources = await db.query(
-        `SELECT referrer, COUNT(*)::int as vues FROM raw_events
-         WHERE site_id = $1 AND event_type='pageview' AND created_at >= $2 AND created_at < $3
-         GROUP BY referrer ORDER BY vues DESC LIMIT 10`,
-        [site.id, jourStr, jourSuiv]
-      );
+      const sessions = new Set();
+      const visitors = new Set();
+      events.forEach(e => { sessions.add(e.session_id); visitors.add(e.ip_hash); });
 
-      const s = stats[0] || { pages_vues: 0, sessions: 0, visiteurs: 0 };
-      await db.query(
-        `INSERT INTO stats_daily (site_id, jour, pages_vues, visiteurs, sessions, top_pages, top_sources)
-         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
-         ON CONFLICT (site_id, jour) DO UPDATE SET
-         pages_vues=EXCLUDED.pages_vues, visiteurs=EXCLUDED.visiteurs,
-         sessions=EXCLUDED.sessions, top_pages=EXCLUDED.top_pages, top_sources=EXCLUDED.top_sources`,
-        [site.id, jourStr, s.pages_vues, s.visiteurs, s.sessions,
-         JSON.stringify(topPages), JSON.stringify(topSources)]
-      );
+      const { data: topPages } = await supabase
+        .from('raw_events')
+        .select('page')
+        .eq('site_id', site.id)
+        .eq('event_type', 'pageview')
+        .gte('created_at', jourStr)
+        .lt('created_at', jourSuiv);
+
+      const pageCounts = {};
+      (topPages || []).forEach(e => { pageCounts[e.page] = (pageCounts[e.page] || 0) + 1; });
+      const topPagesArr = Object.entries(pageCounts)
+        .sort((a, b) => b[1] - a[1]).slice(0, 10)
+        .map(([page, vues]) => ({ page, vues }));
+
+      const { data: topSources } = await supabase
+        .from('raw_events')
+        .select('referrer')
+        .eq('site_id', site.id)
+        .eq('event_type', 'pageview')
+        .neq('referrer', '')
+        .gte('created_at', jourStr)
+        .lt('created_at', jourSuiv);
+
+      const sourceCounts = {};
+      (topSources || []).forEach(e => { sourceCounts[e.referrer] = (sourceCounts[e.referrer] || 0) + 1; });
+      const topSourcesArr = Object.entries(sourceCounts)
+        .sort((a, b) => b[1] - a[1]).slice(0, 10)
+        .map(([referrer, vues]) => ({ referrer, vues }));
+
+      const s = { pages_vues: events.length, sessions: sessions.size, visiteurs: visitors.size };
+      await supabase.from('stats_daily').upsert({
+        site_id: site.id,
+        jour: jourStr,
+        pages_vues: s.pages_vues,
+        visiteurs: s.visiteurs,
+        sessions: s.sessions,
+        top_pages: topPagesArr,
+        top_sources: topSourcesArr,
+      }, { onConflict: 'site_id, jour' });
     }
     console.log(`Daily aggregation done for ${jourStr}`);
   } catch (err) {
@@ -99,9 +147,13 @@ async function aggregateDaily() {
 
 async function cleanup() {
   try {
-    await db.query("DELETE FROM raw_events WHERE created_at < NOW() - INTERVAL '90 days'");
-    await db.query("DELETE FROM heatmap_events WHERE created_at < NOW() - INTERVAL '30 days'");
-    await db.query("DELETE FROM active_sessions WHERE last_ping < NOW() - INTERVAL '1 hour'");
+    const supabase = db.getClient();
+    const oldRaw = new Date(Date.now() - 90 * 86400000).toISOString();
+    const oldHeat = new Date(Date.now() - 30 * 86400000).toISOString();
+    const oldSession = new Date(Date.now() - 3600000).toISOString();
+    await supabase.from('raw_events').delete().lt('created_at', oldRaw);
+    await supabase.from('heatmap_events').delete().lt('created_at', oldHeat);
+    await supabase.from('active_sessions').delete().lt('last_ping', oldSession);
   } catch (e) {}
 }
 
