@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Heatmap - Analytics</title>
 <link rel="stylesheet" href="/assets/dashboard.css">
-<script src="/assets/heatmap.min.js"></script>
 <style>
 #heatmapWrap { width:100%; min-height:400px; border:1px solid #ccc; position:relative; background:#fafafa; overflow:hidden; }
 #heatmapFrame { width:100%; height:100%; border:none; }
@@ -117,8 +116,8 @@ function renderData() {
 
 function renderHeat(res) {
   try {
-    const data = res.points || res;
-    const pageH = res.pageHeight || 800;
+    var data = res.points || res;
+    var pageH = res.pageHeight || 800;
     document.getElementById('dataCount').textContent = data.length + ' points';
     const container = document.getElementById('heatmapCanvas');
     container.innerHTML = '';
@@ -134,11 +133,35 @@ function renderHeat(res) {
     frame.style.height = h + 'px';
     container.style.height = h + 'px';
     void container.offsetHeight;
-    if (typeof h337 === 'undefined') { console.error('h337 not loaded'); document.getElementById('dataCount').textContent = 'Erreur: librairie heatmap non chargée'; return; }
-    var heat = h337.create({ container, radius: 20, blur: .85 });
     var max = 0;
-    data.forEach(d => { if (d.count > max) max = d.count; });
-    heat.setData({ max: max || 1, data: data.map(d => ({ x: Math.round(d.x * w), y: Math.round(d.y * h), value: d.count })) });
+    data.forEach(function(d) { if (d.count > max) max = d.count; });
+    max = max || 1;
+    var canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    container.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    var radius = 30;
+    data.forEach(function(d) {
+      var cx = d.x * w, cy = d.y * h;
+      var intensity = d.count / max;
+      var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
+      var r = Math.round(255 * intensity);
+      var g = Math.round(80 * (1 - intensity));
+      var b = Math.round(50 * (1 - intensity));
+      grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',0.7)');
+      grad.addColorStop(0.5, 'rgba(' + r + ',' + g + ',' + b + ',0.3)');
+      grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fill();
+    });
   } catch(e) { console.error('renderHeat error:', e); document.getElementById('dataCount').textContent = 'Erreur: ' + e.message; }
 }
 
