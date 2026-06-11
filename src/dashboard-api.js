@@ -478,4 +478,21 @@ async function getHeatmapSummary(req, res) {
   });
 }
 
-module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getScrollDepth, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources, getPlatforms, getHeatmapPages, getHeatmapCtas, getHeatmapForms, getHeatmapDeadClicks, getHeatmapRageClicks, getHeatmapScrollDistribution, getHeatmapSummary };
+async function getHealth(req, res) {
+  const supabase = db.getClient();
+  const tables = ['heatmap_clicks', 'heatmap_scrolls', 'form_events'];
+  const result = { ok: true, db: false, tables: {} };
+  try {
+    await supabase.from('raw_events').select('id', { count: 'exact', head: true }).limit(1);
+    result.db = true;
+    for (const t of tables) {
+      try {
+        await supabase.from(t).select('id', { count: 'exact', head: true }).limit(1);
+        result.tables[t] = true;
+      } catch (e) { result.tables[t] = false; result.ok = false; }
+    }
+  } catch (e) { result.ok = false; }
+  res.json(result);
+}
+
+module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getScrollDepth, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources, getPlatforms, getHeatmapPages, getHeatmapCtas, getHeatmapForms, getHeatmapDeadClicks, getHeatmapRageClicks, getHeatmapScrollDistribution, getHeatmapSummary, getHealth };

@@ -224,7 +224,7 @@ async function processEvent(req) {
     });
   }
 
-  if (event_type === 'move' || event_type === 'touch' || event_type === 'scroll') {
+  if (event_type === 'move' || event_type === 'touch' || (event_type === 'scroll' && b.max_scroll_percent === undefined)) {
     heatBuffer.push({
       site_id,
       page_url: url || '/',
