@@ -37,15 +37,17 @@ async function flushBuffer() {
 }
 
 function classifyTraffic(referrer, utmSource, utmMedium) {
-  if (!referrer) return 'direct';
-  const url = referrer.toLowerCase();
-  if (utmMedium === 'cpc' || utmMedium === 'ppc' || utmMedium === 'paid' || utmMedium === 'cpm' || utmMedium === 'display') return 'paid';
-  const social = ['facebook', 'twitter', 'instagram', 'linkedin', 'pinterest', 'tiktok', 'snapchat', 'youtube', 'reddit', 'whatsapp', 'telegram'];
-  if (social.some(d => url.includes(d))) return 'social';
-  const search = ['google', 'bing', 'yahoo', 'duckduckgo', 'yandex', 'baidu', 'ecosia', 'qwant'];
-  if (search.some(e => url.includes(e))) return 'organic';
-  if (utmSource && (utmMedium === 'cpc' || utmMedium === 'paid')) return 'paid';
-  return 'referral';
+  const url = (referrer || '').toLowerCase();
+  const utmSrc = (utmSource || '').toLowerCase();
+  const utmMed = (utmMedium || '').toLowerCase();
+  if (!url && !utmSrc) return { type: 'direct', source: 'Direct' };
+  if (utmMed === 'cpc' || utmMed === 'ppc' || utmMed === 'paid' || utmMed === 'cpm' || utmMed === 'display' || utmMed === 'social') return { type: 'paid', source: utmSrc ? utmSrc.charAt(0).toUpperCase() + utmSrc.slice(1) : 'Paid' };
+  const social = { facebook: 'Facebook', twitter: 'Twitter', instagram: 'Instagram', linkedin: 'LinkedIn', pinterest: 'Pinterest', tiktok: 'TikTok', snapchat: 'Snapchat', youtube: 'YouTube', reddit: 'Reddit', whatsapp: 'WhatsApp', telegram: 'Telegram' };
+  for (const [d, n] of Object.entries(social)) { if (url.includes(d)) return { type: 'social', source: n }; }
+  const search = { google: 'Google', bing: 'Bing', yahoo: 'Yahoo', duckduckgo: 'DuckDuckGo', yandex: 'Yandex', baidu: 'Baidu', ecosia: 'Ecosia', qwant: 'Qwant' };
+  for (const [d, n] of Object.entries(search)) { if (url.includes(d)) return { type: 'organic', source: n }; }
+  try { const host = new URL(referrer).hostname.replace('www.', ''); return { type: 'referral', source: host.split('.')[0].charAt(0).toUpperCase() + host.split('.')[0].slice(1) }; } catch (e) {}
+  return { type: 'referral', source: 'Referral' };
 }
 
 async function processEvent(req) {
@@ -60,7 +62,8 @@ async function processEvent(req) {
   const geo = await geoip.lookup(ip);
   const now = new Date().toISOString();
   const sessionStarted = started_at ? new Date(parseInt(started_at)).toISOString() : now;
-  const trafficSource = classifyTraffic(referrer || '', utm_source, utm_medium);
+  const traffic = classifyTraffic(referrer || '', utm_source, utm_medium);
+  const trafficSource = traffic.type;
 
   const supabase = db.getClient();
 

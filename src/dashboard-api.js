@@ -215,17 +215,20 @@ async function getTrafficSources(req, res) {
     .eq('site_id', siteId)
     .eq('event_type', 'pageview')
     .gte('created_at', startDate);
-  const counts = { direct: 0, organic: 0, social: 0, paid: 0, referral: 0 };
-  const socialDomains = ['facebook','twitter','instagram','linkedin','pinterest','tiktok','snapchat','youtube','reddit','whatsapp','telegram'];
-  const searchEngines = ['google','bing','yahoo','duckduckgo','yandex','baidu','ecosia','qwant'];
+  const counts = {};
+  const social = { facebook: 'Facebook', twitter: 'Twitter', instagram: 'Instagram', linkedin: 'LinkedIn', pinterest: 'Pinterest', tiktok: 'TikTok', snapchat: 'Snapchat', youtube: 'YouTube', reddit: 'Reddit', whatsapp: 'WhatsApp', telegram: 'Telegram' };
+  const search = { google: 'Google', bing: 'Bing', yahoo: 'Yahoo', duckduckgo: 'DuckDuckGo', yandex: 'Yandex', baidu: 'Baidu', ecosia: 'Ecosia', qwant: 'Qwant' };
   (data || []).forEach(e => {
-    if (!e.referrer) counts.direct++;
-    else if (socialDomains.some(d => e.referrer.toLowerCase().includes(d))) counts.social++;
-    else if (searchEngines.some(s => e.referrer.toLowerCase().includes(s))) counts.organic++;
-    else counts.referral++;
+    const url = (e.referrer || '').toLowerCase();
+    if (!url) { counts['Direct'] = { source: 'Direct', type: 'direct', count: (counts['Direct']?.count || 0) + 1 }; return; }
+    for (const [d, n] of Object.entries(social)) { if (url.includes(d)) { counts[n] = { source: n, type: 'social', count: (counts[n]?.count || 0) + 1 }; return; } }
+    for (const [d, n] of Object.entries(search)) { if (url.includes(d)) { counts[n] = { source: n, type: 'organic', count: (counts[n]?.count || 0) + 1 }; return; } }
+    let label = 'Referral';
+    try { const host = new URL(e.referrer).hostname.replace('www.', ''); label = host.split('.')[0].charAt(0).toUpperCase() + host.split('.')[0].slice(1); } catch (ex) {}
+    counts[label] = { source: label, type: 'referral', count: (counts[label]?.count || 0) + 1 };
   });
-  const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
-  const result = Object.entries(counts).map(([source, count]) => ({ source, count, pct: Math.round(count / total * 100) })).sort((a, b) => b.count - a.count);
+  const total = Object.values(counts).reduce((a, b) => a + b.count, 0) || 1;
+  const result = Object.values(counts).map(c => ({ source: c.source, type: c.type, count: c.count, pct: Math.round(c.count / total * 100) })).sort((a, b) => b.count - a.count);
   res.json(result);
 }
 
