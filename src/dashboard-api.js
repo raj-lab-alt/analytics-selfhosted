@@ -1,5 +1,11 @@
 const db = require('./db');
 
+function pageLikePattern(raw) {
+  let path = raw || '/';
+  try { const u = new URL(path); path = u.origin + u.pathname; } catch(e) {}
+  return path.replace(/\*/g, '%').replace(/_/g, '\\_') + (path.includes('*') ? '' : '%');
+}
+
 async function getOverview(req, res) {
   const siteId = req.query.site_id || 1;
   const days = parseInt(req.query.days) || 7;
@@ -93,15 +99,20 @@ async function getHeatmapData(req, res) {
   const siteId = req.query.site_id || 1;
   const rawPage = req.query.page || '/';
   const filterType = req.query.type || 'all';
+  const viewportAccuracy = parseInt(req.query.viewport_accuracy) || 0;
   const supabase = db.getClient();
-  let path = rawPage;
-  try { const u = new URL(rawPage); path = u.origin + u.pathname; } catch(e) {}
-  const escaped = path.replace(/[%_]/g, '\\$&');
+  const likePattern = pageLikePattern(rawPage);
   let query = supabase
     .from('heatmap_events')
     .select('x, y, viewport_w, viewport_h, scroll_y, x_ratio, y_ratio, doc_height')
     .eq('site_id', siteId)
-    .like('page_url', escaped + '%');
+    .like('page_url', likePattern);
+  if (viewportAccuracy > 0) {
+    // Include events from viewports within tolerance (width diff)
+    const minW = Math.max(320, 1920 - viewportAccuracy * 100);
+    const maxW = 1920 + viewportAccuracy * 100;
+    query = query.gte('viewport_w', minW).lte('viewport_w', maxW);
+  }
   if (filterType === 'all') {
     query = query.in('event_type', ['click', 'move', 'touch']);
   } else {
@@ -313,12 +324,12 @@ async function getScrollDepth(req, res) {
   const supabase = db.getClient();
   let path = rawPage;
   try { const u = new URL(rawPage); path = u.origin + u.pathname; } catch(e) {}
-  const escaped = path.replace(/[%_]/g, '\\$&');
+  const likePattern = path.replace(/\*/g, '%').replace(/_/g, '\\_') + (path.includes('*') ? '' : '%');
   const { data } = await supabase
     .from('heatmap_events')
     .select('scroll_y, viewport_h, session_id')
     .eq('site_id', siteId)
-    .like('page_url', escaped + '%');
+    .like('page_url', likePattern);
   const sessionDepths = {};
   (data || []).forEach(e => {
     const depth = (e.scroll_y || 0) + (e.viewport_h || 1080);
@@ -351,7 +362,7 @@ async function getHeatmapCtas(req, res) {
   const supabase = db.getClient();
   const page = req.query.page || '';
   let q = supabase.from('heatmap_clicks').select('cta_name, session_id').eq('site_id', siteId).eq('is_cta', true).neq('cta_name', '');
-  if (page) q = q.eq('page_url', page);
+  if (page) q = q.like('page_url', pageLikePattern(page));
   const { data } = await q;
   const groups = {};
   const sessionPerCta = {};
@@ -372,7 +383,7 @@ async function getHeatmapForms(req, res) {
   const supabase = db.getClient();
   const page = req.query.page || '';
   let q = supabase.from('form_events').select('event_name, form_name').eq('site_id', siteId);
-  if (page) q = q.eq('page_url', page);
+  if (page) q = q.like('page_url', pageLikePattern(page));
   const { data } = await q;
   const groups = {};
   (data || []).forEach(d => {
@@ -391,7 +402,7 @@ async function getHeatmapDeadClicks(req, res) {
   const supabase = db.getClient();
   const page = req.query.page || '';
   let q = supabase.from('heatmap_clicks').select('x_percent, y_percent, session_id').eq('site_id', siteId).eq('is_dead_click', true);
-  if (page) q = q.eq('page_url', page);
+  if (page) q = q.like('page_url', pageLikePattern(page));
   const { data } = await q;
   const total = data ? data.length : 0;
   // Aggregate by 5% grid
@@ -413,7 +424,7 @@ async function getHeatmapRageClicks(req, res) {
   const supabase = db.getClient();
   const page = req.query.page || '';
   let q = supabase.from('heatmap_clicks').select('x_percent, y_percent, session_id').eq('site_id', siteId).eq('is_rage_click', true);
-  if (page) q = q.eq('page_url', page);
+  if (page) q = q.like('page_url', pageLikePattern(page));
   const { data } = await q;
   const total = data ? data.length : 0;
   const grid = {};
@@ -434,7 +445,7 @@ async function getHeatmapScrollDistribution(req, res) {
   const supabase = db.getClient();
   const page = req.query.page || '';
   let q = supabase.from('heatmap_scrolls').select('max_scroll_percent, session_id').eq('site_id', siteId);
-  if (page) q = q.eq('page_url', page);
+  if (page) q = q.like('page_url', pageLikePattern(page));
   const { data } = await q;
   const total = data ? data.length : 0;
   const ranges = [
@@ -457,7 +468,7 @@ async function getHeatmapSummary(req, res) {
   const page = req.query.page || '';
   function mkQuery(table) {
     let q = supabase.from(table).select('*', { count: 'exact', head: true }).eq('site_id', siteId);
-    if (page) q = q.eq('page_url', page);
+    if (page) q = q.like('page_url', pageLikePattern(page));
     return q;
   }
   const [clicks, ctaClicks, deadClicks, rageClicks, scrolls, forms] = await Promise.all([

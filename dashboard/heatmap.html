@@ -48,7 +48,9 @@ table.compact td { padding:4px 6px; border-bottom:1px solid #eee; }
   <h1>Heatmap</h1>
   <div class="card" style="margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <label>Page :</label>
-    <select id="pageSelect" onchange="loadData()" class="input" style="width:380px"></select>
+    <select id="pageSelect" onchange="selectPage(this.value)" class="input" style="width:240px"></select>
+    <input type="text" id="pageInput" placeholder="Ou wildcard (ex: /*)" class="input" style="width:200px" value="" onkeydown="if(event.key==='Enter')loadData()">
+    <button onclick="document.getElementById('pageInput').value='*';loadData()" class="type-btn" title="Toutes les pages">*</button>
     <span id="dataCount" style="color:#888;font-size:13px"></span>
     <span style="margin-left:auto"></span>
     <span id="typeBar">
@@ -64,8 +66,20 @@ table.compact td { padding:4px 6px; border-bottom:1px solid #eee; }
   </div>
   <div class="card" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;">
     <label style="font-size:12px;color:#888;">Rayon:</label>
-    <input type="range" id="radiusSlider" min="5" max="60" value="22" oninput="onRadiusChange(this.value)" style="flex:1;max-width:200px;">
+    <input type="range" id="radiusSlider" min="5" max="60" value="22" oninput="onRadiusChange(this.value)" style="flex:1;max-width:150px;">
     <span id="radiusVal" style="font-size:12px;color:#888;">22</span>
+    <span style="border-left:1px solid #ddd;height:24px"></span>
+    <label style="font-size:12px;color:#888;">Précision viewport:</label>
+    <input type="range" id="viewportSlider" min="0" max="10" value="0" oninput="onViewportChange(this.value)" style="flex:1;max-width:120px;">
+    <span id="viewportVal" style="font-size:12px;color:#888;">Auto</span>
+    <span style="border-left:1px solid #ddd;height:24px"></span>
+    <label style="font-size:12px;color:#888;">Palette:</label>
+    <select id="paletteSelect" onchange="onPaletteChange(this.value)" class="input" style="width:120px;font-size:12px;padding:2px 6px;">
+      <option value="default">Défaut</option>
+      <option value="red-green">Rouge→Vert</option>
+      <option value="purple-yellow">Violet→Jaune</option>
+      <option value="blue-orange">Bleu→Orange</option>
+    </select>
   </div>
   <div id="heatmapWrap">
     <iframe id="heatmapFrame" sandbox="" loading="lazy"></iframe>
@@ -115,9 +129,22 @@ let currentMode = 'heat';
 let currentType = 'all';
 let lastHeat = null, lastScroll = null;
 let radiusFactor = 22;
+let viewportAccuracy = 0;
+let currentPalette = 'default';
 
 function getToken() { return localStorage.getItem('token'); }
 function api(path) { return fetch(path, { headers: { 'Authorization': 'Bearer ' + getToken() }}); }
+
+function getPageUrl() {
+  var input = document.getElementById('pageInput').value.trim();
+  if (input) return input;
+  return document.getElementById('pageSelect').value;
+}
+
+function selectPage(val) {
+  document.getElementById('pageInput').value = val;
+  loadData();
+}
 
 async function loadSites() {
   const r = await api('/api/sites');
@@ -136,17 +163,17 @@ function changeSite(val) {
 
 async function loadPages() {
   const sel = document.getElementById('pageSelect');
-  sel.innerHTML = '<option value="">Chargement...</option>';
+  sel.innerHTML = '<option value="">Pages...</option>';
   try {
     const r = await api('/api/top-pages?site_id=' + siteId + '&days=30');
     const pages = await r.json();
-    if (!pages || pages.length === 0) { sel.innerHTML = ''; loadData(); return; }
+    if (!pages || pages.length === 0) { loadData(); return; }
     const grouped = {};
     pages.forEach(p => {
       try { const u = new URL(p.page); p.page = u.origin + u.pathname; } catch(e) {}
       grouped[p.page] = (grouped[p.page] || 0) + p.vues;
     });
-    sel.innerHTML = Object.entries(grouped).map(([url, vues]) => '<option value="' + url.replace(/"/g, '&quot;') + '">' + url + ' (' + vues + ' vues)</option>').join('');
+    sel.innerHTML = '<option value="">Pages...</option>' + Object.entries(grouped).map(([url, vues]) => '<option value="' + url.replace(/"/g, '&quot;') + '">' + url + ' (' + vues + ' vues)</option>').join('');
   } catch(e) { console.error('loadPages error:', e); }
   loadData();
 }
@@ -169,14 +196,27 @@ function onRadiusChange(val) {
   if (currentMode === 'heat' && lastHeat) renderHeat(lastHeat);
 }
 
+function onViewportChange(val) {
+  viewportAccuracy = parseInt(val);
+  document.getElementById('viewportVal').textContent = viewportAccuracy > 0 ? viewportAccuracy : 'Auto';
+  loadData();
+}
+
+function onPaletteChange(val) {
+  currentPalette = val;
+  drawLegend();
+  if (currentMode === 'heat' && lastHeat) renderHeat(lastHeat);
+}
+
 function loadData() {
-  const pageUrl = document.getElementById('pageSelect').value;
-  if (!pageUrl) return;
+  const pageUrl = getPageUrl();
+  if (!pageUrl) { document.getElementById('dataCount').textContent = 'Sélectionne une page'; return; }
   document.getElementById('heatmapFrame').src = '/page-preview?url=' + encodeURIComponent(pageUrl);
   document.getElementById('heatmapEmpty').style.display = 'none';
   document.getElementById('dataCount').textContent = 'Chargement...';
   var typeParam = currentType === 'all' ? '' : '&type=' + currentType;
-  api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl) + typeParam).then(r => r.json()).then(d => {
+  var accParam = viewportAccuracy > 0 ? '&viewport_accuracy=' + viewportAccuracy : '';
+  api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl) + typeParam + accParam).then(r => r.json()).then(d => {
     lastHeat = d; if (currentMode === 'heat') renderData();
   }).catch(e => console.error('heatmap API error:', e));
   api('/api/scroll-depth?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json()).then(d => {
@@ -352,15 +392,11 @@ function renderHeat(res) {
       var cx = d.x * w, cy = d.y * h;
       var t = Math.log(d.count + 1) / maxLog;
       var alpha = Math.min(0.85, 0.4 + t * 0.5);
-      var r, g, b;
-      if (t < 0.25) { r = 0; g = Math.round(255 * t * 4); b = 255; }
-      else if (t < 0.5) { r = 0; g = 255; b = Math.round(255 * (1 - (t - 0.25) * 4)); }
-      else if (t < 0.75) { r = Math.round(255 * (t - 0.5) * 4); g = 255; b = 0; }
-      else { r = 255; g = Math.round(255 * (1 - (t - 0.75) * 4)); b = 0; }
+      var c = getPaletteColor(t, currentPalette);
       var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, radius);
-      grad.addColorStop(0, 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')');
-      grad.addColorStop(0.35, 'rgba(' + r + ',' + g + ',' + b + ',0.25)');
-      grad.addColorStop(1, 'rgba(' + r + ',' + g + ',' + b + ',0)');
+      grad.addColorStop(0, 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + alpha + ')');
+      grad.addColorStop(0.35, 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',0.25)');
+      grad.addColorStop(1, 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',0)');
       ctx.fillStyle = grad;
       ctx.beginPath();
       ctx.arc(cx, cy, radius, 0, Math.PI * 2);
@@ -398,18 +434,38 @@ function renderScroll(res) {
   });
 }
 
+function getPaletteColor(t, palette) {
+  var r, g, b;
+  if (palette === 'red-green') {
+    r = Math.round(255 * (1 - t));
+    g = Math.round(255 * t);
+    b = 0;
+  } else if (palette === 'purple-yellow') {
+    r = Math.round(200 * t + 55 * (1 - t));
+    g = Math.round(180 * t);
+    b = Math.round(55 * (1 - t) + 200 * t);
+  } else if (palette === 'blue-orange') {
+    r = Math.round(255 * t);
+    g = Math.round(165 * t);
+    b = Math.round(255 * (1 - t));
+  } else {
+    // default: blue-green-yellow-red
+    if (t < 0.25) { r = 0; g = Math.round(255 * t * 4); b = 255; }
+    else if (t < 0.5) { r = 0; g = 255; b = Math.round(255 * (1 - (t - 0.25) * 4)); }
+    else if (t < 0.75) { r = Math.round(255 * (t - 0.5) * 4); g = 255; b = 0; }
+    else { r = 255; g = Math.round(255 * (1 - (t - 0.75) * 4)); b = 0; }
+  }
+  return { r: r, g: g, b: b };
+}
+
 // Draw color legend
 (function drawLegend() {
   var c = document.getElementById('legendGrad');
   var ctx = c.getContext('2d');
   for (var i = 0; i < c.width; i++) {
     var t = i / c.width;
-    var r, g, b;
-    if (t < 0.25) { r = 0; g = Math.round(255 * t * 4); b = 255; }
-    else if (t < 0.5) { r = 0; g = 255; b = Math.round(255 * (1 - (t - 0.25) * 4)); }
-    else if (t < 0.75) { r = Math.round(255 * (t - 0.5) * 4); g = 255; b = 0; }
-    else { r = 255; g = Math.round(255 * (1 - (t - 0.75) * 4)); b = 0; }
-    ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
+    var col = getPaletteColor(t, currentPalette || 'default');
+    ctx.fillStyle = 'rgb(' + col.r + ',' + col.g + ',' + col.b + ')';
     ctx.fillRect(i, 0, 1, c.height);
   }
 })();
