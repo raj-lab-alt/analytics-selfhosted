@@ -22,6 +22,14 @@
 .type-btn.active { background:#36b9cc; color:#fff; border-color:#36b9cc; }
 #legendBar { display:flex; align-items:center; gap:8px; margin-top:4px; font-size:11px; color:#888; }
 #legendGrad { height:12px; border-radius:3px; border:1px solid #ddd; flex:1; }
+.row.three { display:flex; gap:16px; }
+.row.two { display:flex; gap:16px; }
+.card.third { flex:1; min-width:0; }
+.card.half { flex:1; min-width:0; }
+table.compact { width:100%; border-collapse:collapse; font-size:12px; }
+table.compact th { text-align:left; padding:4px 6px; border-bottom:1px solid #ddd; font-weight:600; color:#555; }
+table.compact td { padding:4px 6px; border-bottom:1px solid #eee; }
+@media(max-width:720px){.row.three,.row.two{flex-direction:column;}}
 </style>
 </head>
 <body>
@@ -68,6 +76,37 @@
     <span>Faible</span>
     <canvas id="legendGrad" width="400" height="12"></canvas>
     <span>Fort</span>
+  </div>
+
+  <div class="row three" style="margin-top:20px">
+    <div class="card third"><h2>Résumé</h2>
+      <div id="heatSummary">
+        <p style="color:#888">Aucune donnée enrichie.</p>
+      </div>
+    </div>
+    <div class="card third"><h2>CTA Performance</h2>
+      <div id="ctaTable" style="font-size:13px">
+        <p style="color:#888">Aucun CTA tracké.</p>
+      </div>
+    </div>
+    <div class="card third"><h2>Formulaire</h2>
+      <div id="formTable" style="font-size:13px">
+        <p style="color:#888">Aucun event formulaire.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="row two" style="margin-top:16px">
+    <div class="card half"><h2>Scroll Distribution</h2>
+      <div id="scrollDist" style="font-size:13px">
+        <p style="color:#888">Aucune donnée scroll.</p>
+      </div>
+    </div>
+    <div class="card half"><h2>Zones à problème</h2>
+      <div id="problemZones" style="font-size:13px">
+        <p style="color:#888">Aucun clic problématique.</p>
+      </div>
+    </div>
   </div>
 </main>
 <script>
@@ -143,10 +182,134 @@ function loadData() {
   api('/api/scroll-depth?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json()).then(d => {
     lastScroll = d; if (currentMode === 'scroll') renderData();
   }).catch(e => console.error('scroll API error:', e));
+  loadEnrichment(pageUrl);
+}
+
+async function loadEnrichment(pageUrl) {
+  const enc = encodeURIComponent(pageUrl);
+  const base = '/api/heatmaps';
+  const sid = siteId;
+  try {
+    const [sum, ctas, forms, dead, rage, scrollDist] = await Promise.all([
+      api(`${base}/summary?site_id=${sid}&page=${enc}`).then(r => r.json()),
+      api(`${base}/ctas?site_id=${sid}&page=${enc}`).then(r => r.json()),
+      api(`${base}/forms?site_id=${sid}&page=${enc}`).then(r => r.json()),
+      api(`${base}/dead-clicks?site_id=${sid}&page=${enc}`).then(r => r.json()),
+      api(`${base}/rage-clicks?site_id=${sid}&page=${enc}`).then(r => r.json()),
+      api(`${base}/scroll-distribution?site_id=${sid}&page=${enc}`).then(r => r.json()),
+    ]);
+    renderSummary(sum);
+    renderCtas(ctas);
+    renderForms(forms);
+    renderDeadRage(dead, rage);
+    renderScrollDist(scrollDist);
+    lastDead = dead; lastRage = rage;
+    if (currentMode === 'heat') drawOverlay();
+  } catch(e) { console.error('loadEnrichment error:', e); }
+}
+
+let lastDead = null, lastRage = null;
+
+function renderSummary(sum) {
+  const el = document.getElementById('heatSummary');
+  el.innerHTML = '<table class="compact">' +
+    '<tr><td>Sessions avec scroll</td><td><b>' + (sum.scroll_sessions || 0) + '</b></td></tr>' +
+    '<tr><td>Clics totaux</td><td><b>' + (sum.total_clicks || 0) + '</b></td></tr>' +
+    '<tr><td>Clics CTA</td><td><b>' + (sum.cta_clicks || 0) + '</b> <small>(CTR ' + (sum.cta_ctr || 0) + ')</small></td></tr>' +
+    '<tr><td>Dead clicks</td><td><b>' + (sum.dead_clicks || 0) + '</b></td></tr>' +
+    '<tr><td>Rage clicks</td><td><b>' + (sum.rage_clicks || 0) + '</b></td></tr>' +
+    '<tr><td>Events formulaire</td><td><b>' + (sum.form_events || 0) + '</b></td></tr>' +
+    '</table>';
+}
+
+function renderCtas(ctas) {
+  const el = document.getElementById('ctaTable');
+  if (!ctas || ctas.length === 0) { el.innerHTML = '<p style="color:#888">Aucun CTA tracké.</p>'; return; }
+  el.innerHTML = '<table class="compact sortable"><thead><tr><th>CTA</th><th>Clics</th><th>Sessions</th><th>CTR</th></tr></thead><tbody>' +
+    ctas.map(c => '<tr><td>' + esc(c.cta_name) + '</td><td>' + c.clicks + '</td><td>' + c.sessions + '</td><td>' + c.ctr + '</td></tr>').join('') +
+    '</tbody></table>';
+}
+
+function renderForms(forms) {
+  const el = document.getElementById('formTable');
+  if (!forms || forms.length === 0) { el.innerHTML = '<p style="color:#888">Aucun event formulaire.</p>'; return; }
+  el.innerHTML = '<table class="compact sortable"><thead><tr><th>Formulaire</th><th>Event</th><th>Count</th></tr></thead><tbody>' +
+    forms.map(f => '<tr><td>' + esc(f.form_name) + '</td><td>' + esc(f.event_name) + '</td><td>' + f.count + '</td></tr>').join('') +
+    '</tbody></table>';
+}
+
+function renderDeadRage(dead, rage) {
+  const el = document.getElementById('problemZones');
+  let html = '';
+  if (dead && dead.zones && dead.zones.length > 0) {
+    html += '<h4 style="margin:0 0 4px;color:#888">Dead Clicks</h4><table class="compact"><thead><tr><th>Zone</th><th>Clics</th><th>Sessions</th></tr></thead><tbody>';
+    dead.zones.slice(0, 10).forEach(z => html += '<tr><td>' + z.x_bucket + '%,' + z.y_bucket + '%</td><td>' + z.count + '</td><td>' + z.sessions + '</td></tr>');
+    html += '</tbody></table>';
+  }
+  if (rage && rage.zones && rage.zones.length > 0) {
+    html += '<h4 style="margin:8px 0 4px;color:#888">Rage Clicks</h4><table class="compact"><thead><tr><th>Zone</th><th>Clics</th><th>Sessions</th></tr></thead><tbody>';
+    rage.zones.slice(0, 10).forEach(z => html += '<tr><td>' + z.x_bucket + '%,' + z.y_bucket + '%</td><td>' + z.count + '</td><td>' + z.sessions + '</td></tr>');
+    html += '</tbody></table>';
+  }
+  if (!html) html = '<p style="color:#888">Aucun clic problématique.</p>';
+  el.innerHTML = html;
+}
+
+function renderScrollDist(dist) {
+  const el = document.getElementById('scrollDist');
+  if (!dist || !dist.depth || dist.depth.length === 0) { el.innerHTML = '<p style="color:#888">Aucune donnée scroll.</p>'; return; }
+  el.innerHTML = '<table class="compact sortable"><thead><tr><th>Profondeur</th><th>Visiteurs</th><th>%</th></tr></thead><tbody>' +
+    dist.depth.map(d => '<tr><td>' + d.range + '%</td><td>' + d.visitors + '</td><td>' + d.visitorsPercent + '%</td></tr>').join('') +
+    '</tbody></table>' +
+    '<p style="font-size:11px;color:#888;margin:4px 0 0">Sessions totales: ' + (dist.sessions || 0) + '</p>';
+}
+
+function esc(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function drawOverlay() {
+  // Draw dead click zones as gray circles, rage click zones as red circles on a separate canvas
+  var wrap = document.getElementById('heatmapWrap');
+  var w = document.getElementById('heatmapCanvas').offsetWidth || 1200;
+  var h = wrap.offsetHeight;
+  var canvas = document.getElementById('deadRageCanvas');
+  if (!canvas) {
+    canvas = document.createElement('canvas');
+    canvas.id = 'deadRageCanvas';
+    canvas.style.position = 'absolute';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.pointerEvents = 'none';
+    canvas.style.zIndex = '20';
+    document.getElementById('heatmapOverlay').appendChild(canvas);
+  }
+  canvas.width = w; canvas.height = h;
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  var ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, w, h);
+  if (lastDead && lastDead.zones) {
+    lastDead.zones.forEach(function(z) {
+      var cx = (z.x_bucket + 2.5) / 100 * w;
+      var cy = (z.y_bucket + 2.5) / 100 * h;
+      var r = Math.min(12, 4 + Math.log(z.count + 1) * 3);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(128,128,128,0.5)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(80,80,80,0.8)'; ctx.lineWidth = 1; ctx.stroke();
+    });
+  }
+  if (lastRage && lastRage.zones) {
+    lastRage.zones.forEach(function(z) {
+      var cx = (z.x_bucket + 2.5) / 100 * w;
+      var cy = (z.y_bucket + 2.5) / 100 * h;
+      var r = Math.min(12, 4 + Math.log(z.count + 1) * 3);
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(220,50,50,0.6)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(180,20,20,0.9)'; ctx.lineWidth = 2; ctx.stroke();
+    });
+  }
 }
 
 function renderData() {
-  if (currentMode === 'heat' && lastHeat) renderHeat(lastHeat);
+  if (currentMode === 'heat' && lastHeat) { renderHeat(lastHeat); drawOverlay(); }
   else if (currentMode === 'scroll' && lastScroll) renderScroll(lastScroll);
 }
 

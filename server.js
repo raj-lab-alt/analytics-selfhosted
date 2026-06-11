@@ -9,6 +9,21 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const https = require('https');
 
+// Rate limiter (in-memory)
+const rateHits = new Map();
+app.use('/api/heatmaps', (req, res, next) => {
+  const ip = req.headers['x-forwarded-for'] || req.ip || '0.0.0.0';
+  const now = Date.now();
+  const hit = rateHits.get(ip);
+  if (!hit || hit.resetAt < now) {
+    rateHits.set(ip, { count: 1, resetAt: now + 60000 });
+    return next();
+  }
+  hit.count++;
+  if (hit.count > 120) return res.status(429).json({ ok: false, error: 'Too many requests' });
+  next();
+});
+
 app.use((req, res, next) => {
   const origin = req.headers['origin'];
   if (origin) {
@@ -97,6 +112,15 @@ app.get('/api/traffic-sources', dashboardApi.getTrafficSources);
 app.get('/api/platforms', dashboardApi.getPlatforms);
 app.get('/api/sites', dashboardApi.getSites);
 app.post('/api/sites', dashboardApi.createSite);
+
+// Heatmap enrichment endpoints
+app.get('/api/heatmaps/pages', dashboardApi.getHeatmapPages);
+app.get('/api/heatmaps/ctas', dashboardApi.getHeatmapCtas);
+app.get('/api/heatmaps/forms', dashboardApi.getHeatmapForms);
+app.get('/api/heatmaps/dead-clicks', dashboardApi.getHeatmapDeadClicks);
+app.get('/api/heatmaps/rage-clicks', dashboardApi.getHeatmapRageClicks);
+app.get('/api/heatmaps/scroll-distribution', dashboardApi.getHeatmapScrollDistribution);
+app.get('/api/heatmaps/summary', dashboardApi.getHeatmapSummary);
 
 // Tracker script served at multiple paths to evade adblockers
 app.get(['/tracker.js', '/p.js', '/stat.js', '/a.js'], (req, res) => {
