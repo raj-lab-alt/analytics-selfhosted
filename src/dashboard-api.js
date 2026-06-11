@@ -489,6 +489,34 @@ async function getHeatmapSummary(req, res) {
   });
 }
 
+async function getHeatmapClickmap(req, res) {
+  const siteId = req.query.site_id || 1;
+  const page = req.query.page || '';
+  const supabase = db.getClient();
+  let q = supabase.from('heatmap_clicks').select('element_tag, element_id, element_class, cta_name, is_cta, is_dead_click, is_rage_click, x_percent, y_percent').eq('site_id', siteId);
+  if (page) q = q.like('page_url', pageLikePattern(page));
+  const { data } = await q;
+  const groups = {};
+  (data || []).forEach(d => {
+    const key = (d.element_tag || '') + '|' + (d.element_id || '') + '|' + (d.element_class || '');
+    if (!groups[key]) groups[key] = { tag: d.element_tag, id: d.element_id, cls: d.element_class, clicks: 0, rage: 0, dead: 0, totalX: 0, totalY: 0, cta_name: d.cta_name || '', is_cta: d.is_cta || false };
+    groups[key].clicks++;
+    if (d.is_rage_click) groups[key].rage++;
+    if (d.is_dead_click) groups[key].dead++;
+    groups[key].totalX += d.x_percent || 0;
+    groups[key].totalY += d.y_percent || 0;
+  });
+  const elements = Object.values(groups).map(g => ({
+    selector: (g.tag || '') + (g.id ? '#' + g.id : '') + (g.cls ? '.' + g.cls.split(' ').join('.') : ''),
+    tag: g.tag, id: g.id, cls: g.cls,
+    clicks: g.clicks, rage_clicks: g.rage, dead_clicks: g.dead,
+    cta_name: g.cta_name, is_cta: g.is_cta,
+    avg_x: Math.round(g.totalX / g.clicks * 10) / 10,
+    avg_y: Math.round(g.totalY / g.clicks * 10) / 10,
+  })).sort((a, b) => b.clicks - a.clicks);
+  res.json({ elements, total: data ? data.length : 0 });
+}
+
 async function getHealth(req, res) {
   const supabase = db.getClient();
   const tables = ['heatmap_clicks', 'heatmap_scrolls', 'form_events'];
@@ -506,4 +534,4 @@ async function getHealth(req, res) {
   res.json(result);
 }
 
-module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getScrollDepth, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources, getPlatforms, getHeatmapPages, getHeatmapCtas, getHeatmapForms, getHeatmapDeadClicks, getHeatmapRageClicks, getHeatmapScrollDistribution, getHeatmapSummary, getHealth };
+module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getScrollDepth, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources, getPlatforms, getHeatmapPages, getHeatmapCtas, getHeatmapForms, getHeatmapDeadClicks, getHeatmapRageClicks, getHeatmapScrollDistribution, getHeatmapSummary, getHeatmapClickmap, getHealth };

@@ -123,6 +123,7 @@ app.get('/api/heatmaps/dead-clicks', dashboardApi.getHeatmapDeadClicks);
 app.get('/api/heatmaps/rage-clicks', dashboardApi.getHeatmapRageClicks);
 app.get('/api/heatmaps/scroll-distribution', dashboardApi.getHeatmapScrollDistribution);
 app.get('/api/heatmaps/summary', dashboardApi.getHeatmapSummary);
+app.get('/api/heatmaps/clickmap', dashboardApi.getHeatmapClickmap);
 app.get('/api/heatmaps/health', dashboardApi.getHealth);
 
 // Tracker script served at multiple paths to evade adblockers

@@ -62,6 +62,7 @@ table.compact td { padding:4px 6px; border-bottom:1px solid #eee; }
     <span id="modeBar">
       <button class="mode-btn active" data-mode="heat" onclick="switchMode('heat')">C+M</button>
       <button class="mode-btn" data-mode="scroll" onclick="switchMode('scroll')">Scroll</button>
+      <button class="mode-btn" data-mode="clickmap" onclick="switchMode('clickmap')">Clickmap</button>
     </span>
   </div>
   <div class="card" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;">
@@ -127,7 +128,7 @@ table.compact td { padding:4px 6px; border-bottom:1px solid #eee; }
 let siteId = parseInt(localStorage.getItem('analytics_site_id')) || 1;
 let currentMode = 'heat';
 let currentType = 'all';
-let lastHeat = null, lastScroll = null;
+let lastHeat = null, lastScroll = null, lastClickmap = null;
 let radiusFactor = 22;
 let viewportAccuracy = 0;
 let currentPalette = 'default';
@@ -187,7 +188,8 @@ function setFilter(type) {
 function switchMode(mode) {
   currentMode = mode;
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-  renderData();
+  if (mode === 'clickmap') loadClickmap();
+  else renderData();
 }
 
 function onRadiusChange(val) {
@@ -223,6 +225,17 @@ function loadData() {
     lastScroll = d; if (currentMode === 'scroll') renderData();
   }).catch(e => console.error('scroll API error:', e));
   loadEnrichment(pageUrl);
+  loadClickmap();
+}
+
+async function loadClickmap() {
+  const pageUrl = getPageUrl();
+  if (!pageUrl) return;
+  try {
+    const r = await api('/api/heatmaps/clickmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl)).then(r => r.json());
+    lastClickmap = r;
+    if (currentMode === 'clickmap') renderClickmap(r);
+  } catch(e) { console.error('clickmap error:', e); }
 }
 
 async function loadEnrichment(pageUrl) {
@@ -351,6 +364,7 @@ function drawOverlay() {
 function renderData() {
   if (currentMode === 'heat' && lastHeat) { renderHeat(lastHeat); drawOverlay(); }
   else if (currentMode === 'scroll' && lastScroll) renderScroll(lastScroll);
+  else if (currentMode === 'clickmap' && lastClickmap) renderClickmap(lastClickmap);
 }
 
 function renderHeat(res) {
@@ -403,6 +417,91 @@ function renderHeat(res) {
       ctx.fill();
     });
   } catch(e) { console.error('renderHeat error:', e); document.getElementById('dataCount').textContent = 'Erreur: ' + e.message; }
+}
+
+function renderClickmap(res) {
+  try {
+    var elements = res.elements || [];
+    var total = res.total || 0;
+    document.getElementById('dataCount').textContent = elements.length + ' éléments · ' + total + ' clics';
+    const container = document.getElementById('heatmapCanvas');
+    container.innerHTML = '';
+    if (elements.length === 0) { document.getElementById('heatmapEmpty').style.display = ''; return; }
+    document.getElementById('heatmapEmpty').style.display = 'none';
+    const wrap = document.getElementById('heatmapWrap');
+    const overlay = document.getElementById('heatmapOverlay');
+    const frame = document.getElementById('heatmapFrame');
+    const w = container.offsetWidth || 1200;
+    const h = wrap.offsetHeight || 800;
+    var canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+    canvas.style.position = 'absolute'; canvas.style.top = '0'; canvas.style.left = '0';
+    container.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    var maxClicks = elements[0].clicks || 1;
+
+    // Draw element badges
+    elements.forEach(function(el) {
+      var cx = (el.avg_x / 100) * w;
+      var cy = (el.avg_y / 100) * h;
+      var t = Math.min(1, el.clicks / maxClicks);
+      var size = Math.max(18, 14 + t * 18);
+
+      // Background circle (color by click density)
+      var col = getPaletteColor(t, currentPalette || 'default');
+      ctx.beginPath();
+      ctx.arc(cx, cy, size, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(' + col.r + ',' + col.g + ',' + col.b + ',0.85)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Click count text
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold ' + Math.max(9, Math.round(size * 0.55)) + 'px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(el.clicks > 99 ? '99+' : el.clicks, cx, cy - (el.rage_clicks > 0 ? 4 : 0));
+
+      // Rage indicator (small red dot)
+      if (el.rage_clicks > 0) {
+        ctx.beginPath();
+        ctx.arc(cx + size * 0.55, cy - size * 0.55, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#e74c3c';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 7px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('R', cx + size * 0.55, cy - size * 0.55);
+      }
+
+      // Dead click indicator (small gray dot)
+      if (el.dead_clicks > 0) {
+        ctx.beginPath();
+        ctx.arc(cx - size * 0.55, cy - size * 0.55, 5, 0, Math.PI * 2);
+        ctx.fillStyle = '#888';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // CTA badge
+      if (el.is_cta) {
+        ctx.fillStyle = '#f39c12';
+        ctx.font = 'bold 7px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('CTA', cx, cy - size - 2);
+      }
+    });
+  } catch(e) { console.error('renderClickmap error:', e); document.getElementById('dataCount').textContent = 'Erreur: ' + e.message; }
 }
 
 function renderScroll(res) {
