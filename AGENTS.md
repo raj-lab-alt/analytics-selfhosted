@@ -10,8 +10,9 @@
 server.js            → Entry point (Express + WebSocket)
 tracker.js           → Script client à embarquer sur les sites
 install.sql          → Schema MySQL
+db.js                → Client Supabase (validation Hostinger)
 src/
-  db.js              → Pool PostgreSQL (pg)
+  db.js              → Pool PostgreSQL (pg) avec support Supabase env vars
   collect.js         → POST /collect (buffer batch insert)
   realtime.js        → WebSocket + REST endpoint sessions actives
   aggregate.js       → Agrégation horaire/journalière + nettoyage
@@ -59,7 +60,7 @@ Sans heatmap :
 - WebSocket `/ws?site_id=1` → Mise à jour temps réel
 
 ## Conventions
-- Pas de dépendances lourdes au-delà de Express, pg, ws
+- Pas de dépendances lourdes au-delà de Express, pg, ws, @supabase/supabase-js
 - Le tracker JS doit rester < 10KB
 - Les mots de passe/tokens dans .env, jamais commités
 - Les données brutes sont purgées après 90 jours
