@@ -9,9 +9,10 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 const https = require('https');
 
-// Rate limiter (in-memory)
+// Rate limiter (in-memory, except health)
 const rateHits = new Map();
 app.use('/api/heatmaps', (req, res, next) => {
+  if (req.path === '/health') return next();
   const ip = req.headers['x-forwarded-for'] || req.ip || '0.0.0.0';
   const now = Date.now();
   const hit = rateHits.get(ip);
@@ -70,6 +71,7 @@ app.get('/page-preview', (req, res) => {
 });
 
 app.use((req, res, next) => {
+  if (req.path === '/api/heatmaps/health') return next();
   const auth = req.headers['authorization'];
   if (req.path.startsWith('/dashboard') || req.path.startsWith('/api/')) {
     if (!auth || auth !== 'Bearer ' + (process.env.ADMIN_PASSWORD || 'admin123')) {
