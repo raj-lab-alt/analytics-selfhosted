@@ -33,11 +33,11 @@
     <span id="clickCount" style="margin-left:12px;color:#888;font-size:13px"></span>
   </div>
   <div id="heatmapWrap">
-    <iframe id="heatmapFrame" sandbox="allow-same-origin" loading="lazy"></iframe>
+    <iframe id="heatmapFrame" sandbox="" loading="lazy"></iframe>
     <div id="heatmapCanvas"></div>
     <div id="heatmapEmpty" style="display:none; padding:40px; text-align:center; color:#888;">Aucun clic sur cette page. Ajoute <code>data-heatmap="true"</code> à ton script tracker.</div>
   </div>
-  <p style="margin-top:6px;font-size:12px;color:#999">Le fond de page s'affiche si le site autorise les iframes.</p>
+  <p style="margin-top:6px;font-size:12px;color:#999">La page s'affiche via proxy pour contourner X-Frame-Options. Les scripts ne sont pas exécutés (sandbox).</p>
 </main>
 <script>
 let siteId = parseInt(localStorage.getItem('analytics_site_id')) || 1;
@@ -74,7 +74,7 @@ async function loadPages() {
 function loadHeatmap() {
   const pageUrl = document.getElementById('pageSelect').value;
   if (!pageUrl) return;
-  document.getElementById('heatmapFrame').src = pageUrl;
+  document.getElementById('heatmapFrame').src = '/page-preview?url=' + encodeURIComponent(pageUrl);
   document.getElementById('heatmapEmpty').style.display = 'none';
   const container = document.getElementById('heatmapCanvas');
   container.innerHTML = '';

@@ -7,6 +7,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
+const https = require('https');
 
 app.use((req, res, next) => {
   const origin = req.headers['origin'];
@@ -30,6 +31,28 @@ app.use('/collect', (req, res, next) => {
   next();
 });
 app.use(express.static(path.join(__dirname, 'dashboard')));
+
+// Proxy pour afficher les pages trackées dans l'iframe de la heatmap (contourne X-Frame-Options)
+app.get('/page-preview', (req, res) => {
+  const target = req.query.url;
+  if (!target) return res.status(400).send('Missing url');
+  try {
+    const parsed = new URL(target);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return res.status(400).send('Invalid protocol');
+    const fetcher = parsed.protocol === 'https:' ? https : http;
+    fetcher.get(target, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }, (proxyRes) => {
+      let html = '';
+      proxyRes.on('data', chunk => html += chunk);
+      proxyRes.on('end', () => {
+        html = html.replace('<head>', `<head><base href="${parsed.origin}">`);
+        res.set('Content-Type', 'text/html');
+        res.send(html);
+      });
+    }).on('error', () => res.status(502).send('Proxy error'));
+  } catch (e) {
+    res.status(400).send('Invalid URL');
+  }
+});
 
 app.use((req, res, next) => {
   const auth = req.headers['authorization'];
