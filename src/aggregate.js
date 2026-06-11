@@ -163,4 +163,4 @@ async function cleanupStaleSessions() {
   } catch (e) {}
 }
 
-module.exports = { aggregateHourly, aggregateDaily, cleanup };
+module.exports = { aggregateHourly, aggregateDaily, cleanup, cleanupStaleSessions };
