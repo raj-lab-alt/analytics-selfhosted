@@ -232,11 +232,17 @@ async function getStats(req, res) {
 
   let avgDuration = 0;
   try {
-    const r = await supabase
-      .from('raw_events')
-      .select('session_id, created_at')
-      .eq('site_id', siteId)
-      .gte('created_at', startDate);
+    const [r, activeRes] = await Promise.all([
+      supabase.from('raw_events')
+        .select('session_id, created_at')
+        .eq('site_id', siteId)
+        .gte('created_at', startDate),
+      supabase.from('active_sessions')
+        .select('session_id')
+        .eq('site_id', siteId)
+        .gte('last_ping', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+    ]);
+    const activeSet = new Set((activeRes.data || []).map(s => s.session_id));
     const sessions = r.data || [];
     if (sessions.length > 0) {
       const map = {};
@@ -247,8 +253,14 @@ async function getStats(req, res) {
           if (e.created_at > map[e.session_id].last) map[e.session_id].last = e.created_at;
         }
       });
-      const totalMs = Object.values(map).reduce((sum, s) => sum + (new Date(s.last).getTime() - new Date(s.first).getTime()), 0);
-      const count = Object.keys(map).length;
+      const now = new Date();
+      let totalMs = 0;
+      let count = 0;
+      for (const [sid, s] of Object.entries(map)) {
+        const last = activeSet.has(sid) ? now : new Date(s.last);
+        totalMs += last.getTime() - new Date(s.first).getTime();
+        count++;
+      }
       avgDuration = count > 0 ? Math.round(totalMs / count / 1000) : 0;
     }
   } catch (e) {}

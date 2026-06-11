@@ -84,6 +84,12 @@ function fetchAll() {
       document.getElementById('todayCount').textContent = last.pages_vues || 0;
     }
   });
+  api('/api/stats?site_id=' + siteId + '&days=1').then(r => r.json()).then(function(s) {
+    document.getElementById('avgVisit').textContent = s.avgDuration > 0 ? s.avgDuration + 's' : '—';
+  });
+  api('/api/top-cities?site_id=' + siteId + '&days=1').then(r => r.json()).then(function(c) {
+    document.getElementById('topCity').textContent = c[0] ? c[0].location : '-';
+  });
   api('/api/visitor-locations?site_id=' + siteId)
     .then(r => r.json()).then(data => {
       markers.clearLayers();
@@ -114,13 +120,6 @@ document.addEventListener('DOMContentLoaded', function() {
   connectWS();
   fetchAll();
   setInterval(fetchAll, 10000);
-
-  api('/api/stats?site_id=' + siteId + '&days=1').then(r => r.json()).then(function(s) {
-    document.getElementById('avgVisit').textContent = s.avgDuration + 's';
-  });
-  api('/api/top-cities?site_id=' + siteId + '&days=1').then(r => r.json()).then(function(c) {
-    document.getElementById('topCity').textContent = c[0] ? c[0].location : '-';
-  });
 });
 </script>
 </body>
