@@ -82,14 +82,20 @@ function fetchAll() {
   api('/api/visitor-locations?site_id=' + siteId)
     .then(r => r.json()).then(data => {
       markers.clearLayers();
+      var bounds = [];
       data.forEach(v => {
-        if (v.lat && v.lon) {
+        var lat = parseFloat(v.lat), lon = parseFloat(v.lon);
+        if (lat && lon && Math.abs(lat) > 0.1 && Math.abs(lon) > 0.1) {
           var color = '#4e73df';
-          var c = L.circleMarker([v.lat, v.lon], { radius: 8, fillColor: color, color: '#fff', weight: 2, opacity: 1, fillOpacity: .8 });
+          var c = L.circleMarker([lat, lon], { radius: 8, fillColor: color, color: '#fff', weight: 2, opacity: 1, fillOpacity: .8 });
           c.bindPopup('<strong>' + (v.city || 'Unknown') + ', ' + (v.country || '') + '</strong>Page: ' + (v.page || '/') + '<br>Referrer: ' + (v.referrer || 'direct'));
           c.addTo(markers);
+          bounds.push([lat, lon]);
         }
       });
+      if (bounds.length > 0) {
+        try { map.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 }); } catch(e) { console.error('fitBounds error:', e); }
+      }
     });
 }
 
