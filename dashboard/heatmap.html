@@ -6,7 +6,12 @@
 <title>Heatmap - Analytics</title>
 <link rel="stylesheet" href="/assets/dashboard.css">
 <script src="/assets/heatmap.min.js"></script>
-<style>#heatmapCanvas { width:100%; height:800px; border:1px solid #ccc; position:relative; background:#fafafa; }</style>
+<style>
+#heatmapWrap { width:100%; height:800px; border:1px solid #ccc; position:relative; background:#fafafa; overflow:hidden; }
+#heatmapFrame { width:100%; height:100%; border:none; }
+#heatmapCanvas { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; }
+
+</style>
 </head>
 <body>
 <nav class="nav">
@@ -27,7 +32,12 @@
     <select id="pageSelect" onchange="loadHeatmap()" class="input" style="width:400px"></select>
     <span id="clickCount" style="margin-left:12px;color:#888;font-size:13px"></span>
   </div>
-  <div id="heatmapCanvas"></div>
+  <div id="heatmapWrap">
+    <iframe id="heatmapFrame" sandbox="allow-same-origin" loading="lazy"></iframe>
+    <div id="heatmapCanvas"></div>
+    <div id="heatmapEmpty" style="display:none; padding:40px; text-align:center; color:#888;">Aucun clic sur cette page. Ajoute <code>data-heatmap="true"</code> à ton script tracker.</div>
+  </div>
+  <p style="margin-top:6px;font-size:12px;color:#999">Le fond de page s'affiche si le site autorise les iframes.</p>
 </main>
 <script>
 let siteId = parseInt(localStorage.getItem('analytics_site_id')) || 1;
@@ -64,13 +74,16 @@ async function loadPages() {
 function loadHeatmap() {
   const pageUrl = document.getElementById('pageSelect').value;
   if (!pageUrl) return;
+  document.getElementById('heatmapFrame').src = pageUrl;
+  document.getElementById('heatmapEmpty').style.display = 'none';
+  const container = document.getElementById('heatmapCanvas');
+  container.innerHTML = '';
   api('/api/heatmap?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl))
     .then(r => r.json()).then(data => {
       document.getElementById('clickCount').textContent = data.length + ' clics';
-      const container = document.getElementById('heatmapCanvas');
-      container.innerHTML = '';
-      if (data.length === 0) { container.innerHTML = '<p style="padding:40px;text-align:center;color:#888">Aucun clic sur cette page. Ajoute data-heatmap="true" à ton script tracker.</p>'; return; }
-      const w = container.offsetWidth || 1200;
+      if (data.length === 0) { document.getElementById('heatmapEmpty').style.display = ''; return; }
+      const wrap = document.getElementById('heatmapWrap');
+      const w = wrap.offsetWidth || 1200;
       const h = 800;
       var heat = h337.create({ container, radius: 20, blur: .85 });
       var max = 0;

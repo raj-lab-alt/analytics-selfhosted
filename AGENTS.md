@@ -47,6 +47,10 @@ Sans heatmap :
 <script src="https://votre-domaine.com/tracker.js" data-site="1" defer></script>
 ```
 
+## Déploiement
+1. `git add -A && git commit -m "message" && git push`
+2. Hostinger redéploie automatiquement depuis GitHub (attendre ~1-2 min)
+
 ## Commandes
 - `npm start` → Lance le serveur
 - `npm run dev` → Mode watch (Node --watch)
