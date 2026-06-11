@@ -63,6 +63,7 @@ table.compact td { padding:4px 6px; border-bottom:1px solid #eee; }
       <button class="mode-btn active" data-mode="heat" onclick="switchMode('heat')">C+M</button>
       <button class="mode-btn" data-mode="scroll" onclick="switchMode('scroll')">Scroll</button>
       <button class="mode-btn" data-mode="clickmap" onclick="switchMode('clickmap')">Clickmap</button>
+      <button class="mode-btn" data-mode="zones" onclick="switchMode('zones')">Zones</button>
     </span>
   </div>
   <div class="card" style="margin-bottom:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 16px;">
@@ -123,12 +124,25 @@ table.compact td { padding:4px 6px; border-bottom:1px solid #eee; }
       </div>
     </div>
   </div>
+
+  <div class="row two" style="margin-top:16px">
+    <div class="card half"><h2>Entonnoir Formulaire</h2>
+      <div id="formFunnel" style="font-size:13px">
+        <p style="color:#888">Aucun event formulaire.</p>
+      </div>
+    </div>
+    <div class="card half"><h2>Problèmes par élément</h2>
+      <div id="problemRanking" style="font-size:13px">
+        <p style="color:#888">Aucun clic problématique.</p>
+      </div>
+    </div>
+  </div>
 </main>
 <script>
 let siteId = parseInt(localStorage.getItem('analytics_site_id')) || 1;
 let currentMode = 'heat';
 let currentType = 'all';
-let lastHeat = null, lastScroll = null, lastClickmap = null;
+let lastHeat = null, lastScroll = null, lastClickmap = null, lastZones = null;
 let radiusFactor = 22;
 let viewportAccuracy = 0;
 let currentPalette = 'default';
@@ -189,6 +203,7 @@ function switchMode(mode) {
   currentMode = mode;
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   if (mode === 'clickmap') loadClickmap();
+  else if (mode === 'zones') loadZones();
   else renderData();
 }
 
@@ -243,22 +258,36 @@ async function loadEnrichment(pageUrl) {
   const base = '/api/heatmaps';
   const sid = siteId;
   try {
-    const [sum, ctas, forms, dead, rage, scrollDist] = await Promise.all([
+    const [sum, ctas, forms, dead, rage, scrollDist, funnel, problems] = await Promise.all([
       api(`${base}/summary?site_id=${sid}&page=${enc}`).then(r => r.json()),
       api(`${base}/ctas?site_id=${sid}&page=${enc}`).then(r => r.json()),
       api(`${base}/forms?site_id=${sid}&page=${enc}`).then(r => r.json()),
       api(`${base}/dead-clicks?site_id=${sid}&page=${enc}`).then(r => r.json()),
       api(`${base}/rage-clicks?site_id=${sid}&page=${enc}`).then(r => r.json()),
       api(`${base}/scroll-distribution?site_id=${sid}&page=${enc}`).then(r => r.json()),
+      api(`${base}/form-funnel?site_id=${sid}&page=${enc}`).then(r => r.json()),
+      api(`${base}/problem-ranking?site_id=${sid}&page=${enc}`).then(r => r.json()),
     ]);
     renderSummary(sum);
     renderCtas(ctas);
     renderForms(forms);
     renderDeadRage(dead, rage);
     renderScrollDist(scrollDist);
+    renderFormFunnel(funnel);
+    renderProblemRanking(problems);
     lastDead = dead; lastRage = rage;
     if (currentMode === 'heat') drawOverlay();
   } catch(e) { console.error('loadEnrichment error:', e); }
+}
+
+async function loadZones() {
+  const pageUrl = getPageUrl();
+  if (!pageUrl) return;
+  try {
+    const r = await api('/api/heatmaps/engagement-zones?site_id=' + siteId + '&page=' + encodeURIComponent(pageUrl) + '&grid=5').then(r => r.json());
+    lastZones = r;
+    renderZones(r);
+  } catch(e) { console.error('loadZones error:', e); }
 }
 
 let lastDead = null, lastRage = null;
@@ -319,6 +348,90 @@ function renderScrollDist(dist) {
 
 function esc(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+function renderFormFunnel(funnels) {
+  const el = document.getElementById('formFunnel');
+  if (!funnels || funnels.length === 0) { el.innerHTML = '<p style="color:#888">Aucun event formulaire.</p>'; return; }
+  el.innerHTML = funnels.map(f => {
+    let html = '<h4 style="margin:4px 0;font-size:13px;color:#333">' + esc(f.form_name) + '</h4>';
+    html += '<div style="margin-bottom:8px">';
+    f.steps.forEach(s => {
+      var barW = Math.max(4, 100 - (s.dropoff_pct || 0));
+      html += '<div style="display:flex;align-items:center;gap:6px;margin:3px 0">';
+      html += '<span style="width:80px;font-size:11px;color:#888;text-align:right">' + esc(s.event) + (s.field_order !== null ? ' #' + s.field_order : '') + '</span>';
+      html += '<div style="flex:1;height:14px;background:#eee;border-radius:3px;overflow:hidden">';
+      html += '<div style="height:100%;width:' + barW + '%;background:' + (s.dropoff_pct > 30 ? '#e74c3c' : '#7cb342') + ';border-radius:3px"></div></div>';
+      html += '<span style="width:50px;font-size:11px;color:#888">' + s.sessions + '/' + f.total_sessions + '</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+    return html;
+  }).join('');
+}
+
+function renderProblemRanking(data) {
+  const el = document.getElementById('problemRanking');
+  if (!data || (!data.rage_ranked.length && !data.dead_ranked.length)) { el.innerHTML = '<p style="color:#888">Aucun clic problématique.</p>'; return; }
+  var html = '';
+  if (data.rage_ranked.length) {
+    html += '<h4 style="margin:0 0 4px;color:#c0392b">🔥 Rage clicks</h4><table class="compact"><thead><tr><th>Élément</th><th>Clics</th><th>Rage</th><th>%</th></tr></thead><tbody>';
+    data.rage_ranked.slice(0, 8).forEach(e => html += '<tr><td style="font-size:11px">' + esc(e.selector) + '</td><td>' + e.clicks + '</td><td style="color:#c0392b;font-weight:700">' + e.rage + '</td><td>' + e.rage_rate + '%</td></tr>');
+    html += '</tbody></table>';
+  }
+  if (data.dead_ranked.length) {
+    html += '<h4 style="margin:8px 0 4px;color:#888">💀 Dead clicks</h4><table class="compact"><thead><tr><th>Élément</th><th>Clics</th><th>Dead</th><th>%</th></tr></thead><tbody>';
+    data.dead_ranked.slice(0, 8).forEach(e => html += '<tr><td style="font-size:11px">' + esc(e.selector) + '</td><td>' + e.clicks + '</td><td style="color:#888">' + e.dead + '</td><td>' + e.dead_rate + '%</td></tr>');
+    html += '</tbody></table>';
+  }
+  el.innerHTML = html;
+}
+
+function renderZones(res) {
+  try {
+    var zones = res.zones || [];
+    document.getElementById('dataCount').textContent = zones.length + ' zones · ' + (res.total_sessions || 0) + ' sessions';
+    const container = document.getElementById('heatmapCanvas');
+    container.innerHTML = '';
+    if (zones.length === 0) { document.getElementById('heatmapEmpty').style.display = ''; return; }
+    document.getElementById('heatmapEmpty').style.display = 'none';
+    const wrap = document.getElementById('heatmapWrap');
+    const overlay = document.getElementById('heatmapOverlay');
+    const frame = document.getElementById('heatmapFrame');
+    const w = container.offsetWidth || 1200;
+    const h = wrap.offsetHeight || 800;
+    var canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+    canvas.style.position = 'absolute'; canvas.style.top = '0'; canvas.style.left = '0';
+    container.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    var grid = res.grid_size || 5;
+    var maxScore = zones.reduce(function(m, z) { return Math.max(m, z.engagement_score); }, 1);
+
+    zones.forEach(function(z) {
+      var zx = (z.x / 100) * w;
+      var zy = (z.y / 100) * h;
+      var zw = (grid / 100) * w;
+      var zh = (grid / 100) * h;
+      var t = z.engagement_score / maxScore;
+      var col = getPaletteColor(t, currentPalette || 'default');
+      ctx.fillStyle = 'rgba(' + col.r + ',' + col.g + ',' + col.b + ',0.35)';
+      ctx.fillRect(zx, zy, Math.max(1, zw), Math.max(1, zh));
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(zx, zy, Math.max(1, zw), Math.max(1, zh));
+
+      // Label for zones with high engagement
+      if (z.engagement_score > maxScore * 0.6) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(z.clicks + ' clics', zx + zw / 2, zy + zh / 2 + 8);
+      }
+    });
+  } catch(e) { console.error('renderZones error:', e); document.getElementById('dataCount').textContent = 'Erreur: ' + e.message; }
+}
+
 function drawOverlay() {
   // Draw dead click zones as gray circles, rage click zones as red circles on a separate canvas
   var wrap = document.getElementById('heatmapWrap');
@@ -365,6 +478,7 @@ function renderData() {
   if (currentMode === 'heat' && lastHeat) { renderHeat(lastHeat); drawOverlay(); }
   else if (currentMode === 'scroll' && lastScroll) renderScroll(lastScroll);
   else if (currentMode === 'clickmap' && lastClickmap) renderClickmap(lastClickmap);
+  else if (currentMode === 'zones' && lastZones) renderZones(lastZones);
 }
 
 function renderHeat(res) {
