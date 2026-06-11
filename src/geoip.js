@@ -11,11 +11,13 @@ async function lookup(ip) {
 
   try {
     const data = await new Promise((resolve, reject) => {
-      http.get(`http://ip-api.com/json/${ip}?fields=city,country,lat,lon`, res => {
+      const req = http.get(`http://ip-api.com/json/${ip}?fields=city,country,lat,lon`, res => {
         let body = '';
         res.on('data', c => body += c);
         res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { reject(e); } });
-      }).on('error', reject);
+      });
+      req.setTimeout(2000, () => { req.destroy(); reject(new Error('timeout')); });
+      req.on('error', reject);
     });
 
     const result = {

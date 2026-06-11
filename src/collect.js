@@ -75,7 +75,7 @@ async function collect(req, res) {
 
   buffer.push({
     site_id, api_key: apiKey, page: url || '/', referrer: referrer || '', ua, ip_hash: ipHash,
-    country: geo.country, city: geo.city, lat: geo.lat, lon: geo.lon,
+    country: geo.country, city: geo.city,
     screen_w: screen_w || 0, screen_h: screen_h || 0,
     session_id, event_type: event_type || 'pageview', created_at: new Date().toISOString(),
   });

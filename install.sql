@@ -16,8 +16,6 @@ CREATE TABLE IF NOT EXISTS raw_events (
   ip_hash VARCHAR(64) DEFAULT '',
   country VARCHAR(4) DEFAULT '',
   city VARCHAR(100) DEFAULT '',
-  lat REAL DEFAULT 0,
-  lon REAL DEFAULT 0,
   screen_w INT DEFAULT 0,
   screen_h INT DEFAULT 0,
   session_id VARCHAR(36) NOT NULL,
