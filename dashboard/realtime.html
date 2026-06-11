@@ -74,11 +74,16 @@ function fetchAll() {
   api('/api/active-sessions?site_id=' + siteId)
     .then(r => r.json()).then(data => {
       document.getElementById('activeCount').textContent = data.total;
-      document.getElementById('todayCount').textContent = data.total;
       document.getElementById('sessionsBody').innerHTML = data.sessions.map(s =>
         '<tr><td>' + esc(s.page) + '</td><td>' + esc(s.referrer) + '</td><td>' + esc(s.country) + '</td><td>' + new Date(s.last_ping).toLocaleTimeString() + '</td></tr>'
       ).join('');
     });
+  api('/api/overview?site_id=' + siteId + '&days=90').then(r => r.json()).then(function(data) {
+    if (Array.isArray(data) && data.length) {
+      var last = data[data.length - 1];
+      document.getElementById('todayCount').textContent = last.pages_vues || 0;
+    }
+  });
   api('/api/visitor-locations?site_id=' + siteId)
     .then(r => r.json()).then(data => {
       markers.clearLayers();
