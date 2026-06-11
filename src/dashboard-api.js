@@ -19,45 +19,54 @@ function applyFilters(query, req, opts) {
 }
 
 async function getOverview(req, res) {
-  const siteId = req.query.site_id || 1;
-  const days = parseInt(req.query.days) || 7;
-  const supabase = db.getClient();
-  const startDate = new Date(Date.now() - days * 86400000).toISOString();
-
-  let events;
   try {
-    const r = await supabase
-      .from('raw_events')
-      .select('created_at, session_id, ip_hash')
-      .eq('site_id', siteId)
-      .eq('event_type', 'pageview')
-      .gte('created_at', startDate);
-    if (r.error) throw r.error;
-    events = r.data || [];
+    const siteId = req.query.site_id || 1;
+    const days = parseInt(req.query.days) || 7;
+    const supabase = db.getClient();
+    const startDate = new Date(Date.now() - days * 86400000).toISOString();
+
+    let events;
+    try {
+      const r = await supabase
+        .from('raw_events')
+        .select('created_at, session_id, ip_hash')
+        .eq('site_id', siteId)
+        .eq('event_type', 'pageview')
+        .gte('created_at', startDate);
+      if (r.error) throw r.error;
+      events = r.data || [];
+    } catch (e) {
+      const r = await supabase
+        .from('raw_events')
+        .select('created_at, session_id, ip_hash')
+        .eq('site_id', siteId)
+        .gte('created_at', startDate);
+      events = r.data || [];
+    }
+
+    const byDay = {};
+    (events || []).forEach(e => {
+      const day = e.created_at.slice(0, 10);
+      if (!byDay[day]) byDay[day] = { jour: day, pages_vues: 0, visiteurs: new Set(), sessions: new Set() };
+      byDay[day].pages_vues++;
+      byDay[day].visiteurs.add(e.ip_hash);
+      byDay[day].sessions.add(e.session_id);
+    });
+
+    const result = Object.values(byDay)
+      .map(d => ({ jour: d.jour, pages_vues: d.pages_vues, visiteurs: d.visiteurs.size, sessions: d.sessions.size }))
+      .sort((a, b) => a.jour.localeCompare(b.jour));
+
+    const today = new Date().toISOString().slice(0, 10);
+    const last = result[result.length - 1];
+    if (!last || last.jour !== today) {
+      result.push({ jour: today, pages_vues: 0, visiteurs: 0, sessions: 0 });
+    }
+
+    res.json(result);
   } catch (e) {
-    // Fallback: event_type column may not exist yet (migrate.sql not run)
-    const r = await supabase
-      .from('raw_events')
-      .select('created_at, session_id, ip_hash')
-      .eq('site_id', siteId)
-      .gte('created_at', startDate);
-    events = r.data || [];
+    res.json([{ jour: new Date().toISOString().slice(0, 10), pages_vues: 0, visiteurs: 0, sessions: 0 }]);
   }
-
-  const byDay = {};
-  (events || []).forEach(e => {
-    const day = e.created_at.slice(0, 10);
-    if (!byDay[day]) byDay[day] = { jour: day, pages_vues: 0, visiteurs: new Set(), sessions: new Set() };
-    byDay[day].pages_vues++;
-    byDay[day].visiteurs.add(e.ip_hash);
-    byDay[day].sessions.add(e.session_id);
-  });
-
-  const result = Object.values(byDay)
-    .map(d => ({ jour: d.jour, pages_vues: d.pages_vues, visiteurs: d.visiteurs.size, sessions: d.sessions.size }))
-    .sort((a, b) => a.jour.localeCompare(b.jour));
-
-  res.json(result);
 }
 
 async function getTopPages(req, res) {

@@ -99,6 +99,19 @@ app.get('/collect', async (req, res) => {
 app.get('/favicon.ico', (req, res) => { res.set('Content-Type', 'image/gif'); res.set('Cache-Control', 'public, max-age=86400'); res.send(Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64')); });
 app.get('/ping', (req, res) => res.json({ pong: true }));
 app.get('/dbg', async (req, res) => { try { const s = db.getClient(); const { data, error } = await s.from('active_sessions').insert({ session_id: 'dbg-' + Date.now(), site_id: 2, page: '/dbg', ua: 'test', last_ping: new Date().toISOString() }).select(); res.json({ ok: !error, data, error: error?.message }); } catch(e) { res.json({ ok: false, error: e.message }); } });
+app.get('/diag', async (req, res) => {
+  try {
+    const s = db.getClient();
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const { count: rawCount } = await s.from('raw_events').select('*', { count: 'exact', head: true }).gte('created_at', today);
+    const { count: activeCount } = await s.from('active_sessions').select('*', { count: 'exact', head: true });
+    const { count: clickCount } = await s.from('heatmap_clicks').select('*', { count: 'exact', head: true });
+    res.json({ ok: true, today_raw: rawCount, active_sessions: activeCount, heatmap_clicks: clickCount });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
 
 app.get('/api/overview', dashboardApi.getOverview);
 app.get('/api/top-pages', dashboardApi.getTopPages);

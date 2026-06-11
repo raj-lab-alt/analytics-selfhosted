@@ -240,8 +240,8 @@ async function processEvent(req) {
     if (heatBuffer.length >= HEAT_FLUSH_THRESHOLD) flushHeatBuffer();
   }
 
-  // Skip raw_events buffer for pixel fallback (dedup with primary POST)
-  if (!b._px) {
+  // Dedup: pixel fallback skips buffer if POST already buffered the same session+event
+  if (!b._px || !buffer.some(e => e.session_id === session_id && e.event_type === (event_type || 'pageview'))) {
     buffer.push({
       site_id, api_key: '', page: url || '/', referrer: referrer || '', ua, ip_hash: ipHash,
       country: geo.country, city: geo.city,

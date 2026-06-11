@@ -23,7 +23,8 @@ async function loadOverview(selectedDays) {
   document.querySelectorAll('.chart-controls button').forEach(b => b.classList.toggle('active', b.dataset.days == selectedDays));
 
   // Always fetch 90 days so totals are accurate regardless of chart selection
-  const overview = await (await api('/api/overview?site_id=' + siteId + '&days=90')).json();
+  var overview = await (await api('/api/overview?site_id=' + siteId + '&days=90')).json();
+  if (!Array.isArray(overview) || !overview.length) overview = [{ jour: new Date().toISOString().slice(0, 10), pages_vues: 0, visiteurs: 0, sessions: 0 }];
 
   // Chart: show only selected period
   if (chart) chart.destroy();
