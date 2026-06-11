@@ -11,7 +11,7 @@ async function lookup(ip) {
 
   try {
     const data = await new Promise((resolve, reject) => {
-      const req = http.get(`http://ip-api.com/json/${ip}?fields=city,country,lat,lon`, res => {
+      const req = http.get(`http://ip-api.com/json/${ip}?fields=city,countryCode,lat,lon`, res => {
         let body = '';
         res.on('data', c => body += c);
         res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { reject(e); } });
@@ -22,7 +22,7 @@ async function lookup(ip) {
 
     const result = {
       city: data.city || '',
-      country: data.country || '',
+      country: data.countryCode || '',
       lat: data.lat || 0,
       lon: data.lon || 0,
     };
