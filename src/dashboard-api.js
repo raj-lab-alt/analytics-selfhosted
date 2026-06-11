@@ -116,6 +116,36 @@ async function getRealtimeCount(req, res) {
   res.json({ active: error ? 0 : count });
 }
 
+async function getRealtimeDetail(req, res) {
+  const siteId = req.query.site_id || 1;
+  const supabase = db.getClient();
+  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  try {
+    const [activeRes, raw5, raw30] = await Promise.all([
+      supabase.from('active_sessions')
+        .select('*', { count: 'exact', head: true })
+        .eq('site_id', siteId)
+        .gte('last_ping', fiveMinAgo),
+      supabase.from('raw_events')
+        .select('session_id')
+        .eq('site_id', siteId)
+        .eq('event_type', 'pageview')
+        .gte('created_at', fiveMinAgo),
+      supabase.from('raw_events')
+        .select('session_id')
+        .eq('site_id', siteId)
+        .eq('event_type', 'pageview')
+        .gte('created_at', thirtyMinAgo),
+    ]);
+    const last5min = new Set((raw5.data || []).map(r => r.session_id)).size;
+    const last30min = new Set((raw30.data || []).map(r => r.session_id)).size;
+    res.json({ activeNow: activeRes.error ? 0 : activeRes.count, last5min, last30min });
+  } catch (e) {
+    res.json({ activeNow: 0, last5min: 0, last30min: 0 });
+  }
+}
+
 async function getHeatmapData(req, res) {
   const siteId = req.query.site_id || 1;
   const rawPage = req.query.page || '/';
@@ -732,4 +762,4 @@ async function getHealth(req, res) {
   res.json(result);
 }
 
-module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getScrollDepth, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources, getPlatforms, getHeatmapPages, getHeatmapCtas, getHeatmapForms, getHeatmapDeadClicks, getHeatmapRageClicks, getHeatmapScrollDistribution, getHeatmapSummary, getHeatmapClickmap, getHeatmapFormFunnel, getHeatmapProblemRanking, getHeatmapEngagementZones, getHealth };
+module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getRealtimeDetail, getHeatmapData, getScrollDepth, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources, getPlatforms, getHeatmapPages, getHeatmapCtas, getHeatmapForms, getHeatmapDeadClicks, getHeatmapRageClicks, getHeatmapScrollDistribution, getHeatmapSummary, getHeatmapClickmap, getHeatmapFormFunnel, getHeatmapProblemRanking, getHeatmapEngagementZones, getHealth };

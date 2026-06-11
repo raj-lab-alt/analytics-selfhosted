@@ -127,6 +127,7 @@ app.get('/api/traffic-sources', dashboardApi.getTrafficSources);
 app.get('/api/platforms', dashboardApi.getPlatforms);
 app.get('/api/sites', dashboardApi.getSites);
 app.post('/api/sites', dashboardApi.createSite);
+app.get('/api/realtime/detail', dashboardApi.getRealtimeDetail);
 
 // Heatmap enrichment endpoints
 app.get('/api/heatmaps/pages', dashboardApi.getHeatmapPages);

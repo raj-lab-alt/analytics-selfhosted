@@ -25,9 +25,11 @@
   <h1>Realtime Visitors</h1>
   <div class="stats-grid">
     <div class="stat-card highlight"><h3>Active Now</h3><p id="activeCount">0</p></div>
+    <div class="stat-card"><h3>Last 5 min</h3><p id="last5min">0</p></div>
+    <div class="stat-card"><h3>Last 30 min</h3><p id="last30min">0</p></div>
     <div class="stat-card"><h3>Today</h3><p id="todayCount">0</p></div>
-    <div class="stat-card"><h3>Avg Visit</h3><p id="avgVisit">0s</p></div>
-    <div class="stat-card"><h3>Top City</h3><p id="topCity">-</p></div>
+    <div class="stat-card"><h3>Avg Visit</h3><p id="avgVisit">—</p></div>
+    <div class="stat-card"><h3>Top City</h3><p id="topCity">—</p></div>
   </div>
   <div id="map"></div>
   <div class="card">
@@ -71,9 +73,13 @@ function connectWS() {
 }
 
 function fetchAll() {
+  api('/api/realtime/detail?site_id=' + siteId).then(r => r.json()).then(function(d) {
+    document.getElementById('activeCount').textContent = d.activeNow;
+    document.getElementById('last5min').textContent = d.last5min;
+    document.getElementById('last30min').textContent = d.last30min;
+  });
   api('/api/active-sessions?site_id=' + siteId)
     .then(r => r.json()).then(data => {
-      document.getElementById('activeCount').textContent = data.total;
       document.getElementById('sessionsBody').innerHTML = data.sessions.map(s =>
         '<tr><td>' + esc(s.page) + '</td><td>' + esc(s.referrer) + '</td><td>' + esc(s.country) + '</td><td>' + new Date(s.last_ping).toLocaleTimeString() + '</td></tr>'
       ).join('');
