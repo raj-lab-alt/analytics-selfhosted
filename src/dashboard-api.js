@@ -101,7 +101,7 @@ async function getHeatmapData(req, res) {
     .select('x, y')
     .eq('site_id', siteId)
     .like('page_url', escaped + '%')
-    .eq('event_type', 'click');
+    .in('event_type', ['click', 'move']);
   const counts = {};
   (data || []).forEach(e => { const k = e.x + ',' + e.y; counts[k] = (counts[k] || 0) + 1; });
   const result = Object.entries(counts).map(([k, count]) => { const [x, y] = k.split(','); return { x: parseInt(x), y: parseInt(y), count }; });
