@@ -240,16 +240,19 @@ async function processEvent(req) {
     if (heatBuffer.length >= HEAT_FLUSH_THRESHOLD) flushHeatBuffer();
   }
 
-  buffer.push({
-    site_id, api_key: '', page: url || '/', referrer: referrer || '', ua, ip_hash: ipHash,
-    country: geo.country, city: geo.city,
-    screen_w: b.screen_w || 0, screen_h: b.screen_h || 0,
-    session_id, event_type: event_type || 'pageview', created_at: now,
-    traffic_source: trafficSource,
-    utm_source: utm_source || '', utm_medium: utm_medium || '', utm_campaign: utm_campaign || '',
-  });
-  bufferSize++;
-  if (bufferSize >= FLUSH_THRESHOLD || event_type === 'exit') flushBuffer();
+  // Skip raw_events buffer for pixel fallback (dedup with primary POST)
+  if (!b._px) {
+    buffer.push({
+      site_id, api_key: '', page: url || '/', referrer: referrer || '', ua, ip_hash: ipHash,
+      country: geo.country, city: geo.city,
+      screen_w: b.screen_w || 0, screen_h: b.screen_h || 0,
+      session_id, event_type: event_type || 'pageview', created_at: now,
+      traffic_source: trafficSource,
+      utm_source: utm_source || '', utm_medium: utm_medium || '', utm_campaign: utm_campaign || '',
+    });
+    bufferSize++;
+    if (bufferSize >= FLUSH_THRESHOLD || event_type === 'exit') flushBuffer();
+  }
 }
 
 function getDocSize(b) {
