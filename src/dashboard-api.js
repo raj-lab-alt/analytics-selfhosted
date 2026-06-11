@@ -223,13 +223,13 @@ async function getStats(req, res) {
 
   let avgDuration = 0;
   try {
-    const { data: sessions } = await supabase
+    const r = await supabase
       .from('raw_events')
       .select('session_id, created_at')
       .eq('site_id', siteId)
       .gte('created_at', startDate);
-
-    if (sessions && sessions.length > 0) {
+    const sessions = r.data || [];
+    if (sessions.length > 0) {
       const map = {};
       sessions.forEach(e => {
         if (!map[e.session_id]) map[e.session_id] = { first: e.created_at, last: e.created_at };
