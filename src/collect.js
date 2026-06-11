@@ -129,9 +129,11 @@ async function processEvent(req) {
     utm_campaign: utm_campaign || '',
     last_ping: now,
   };
-  try {
-    await supabase.from('active_sessions').upsert(sessionData, { onConflict: 'session_id' });
-  } catch (e) {}
+  if (event_type === 'exit') {
+    try { await supabase.from('active_sessions').delete().eq('session_id', session_id); } catch (e) {}
+  } else {
+    try { await supabase.from('active_sessions').upsert(sessionData, { onConflict: 'session_id' }); } catch (e) {}
+  }
 
   // Route to appropriate table based on event_type
   if (event_type === 'click' || event_type === 'cta_click') {
