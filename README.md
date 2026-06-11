@@ -1,6 +1,6 @@
 # Analytics Self-Hosted
 
-Self-hosted web analytics platform (Google Analytics alternative) built with Node.js and MySQL.
+Self-hosted web analytics platform (Google Analytics alternative) built with Node.js and PostgreSQL.
 
 ## Features
 - Page views, visitors, sessions tracking
@@ -14,7 +14,7 @@ Self-hosted web analytics platform (Google Analytics alternative) built with Nod
 ## Quick Start
 ```bash
 npm install
-cp .env.example .env   # edit DB credentials
+cp .env.example .env   # edit DB credentials (PostgreSQL or Supabase DATABASE_URL)
 npm start
 ```
 

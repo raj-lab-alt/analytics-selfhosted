@@ -5,7 +5,7 @@ async function getOverview(req, res) {
   const days = parseInt(req.query.days) || 7;
   const rows = await db.query(
     `SELECT jour, pages_vues, visiteurs, sessions FROM stats_daily
-     WHERE site_id = ? AND jour >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+     WHERE site_id = $1 AND jour >= CURRENT_DATE - $2::int
      ORDER BY jour ASC`,
     [siteId, days]
   );
@@ -16,8 +16,8 @@ async function getTopPages(req, res) {
   const siteId = req.query.site_id || 1;
   const days = parseInt(req.query.days) || 7;
   const rows = await db.query(
-    `SELECT page, COUNT(*) as vues FROM raw_events
-     WHERE site_id = ? AND event_type='pageview' AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+    `SELECT page, COUNT(*)::int as vues FROM raw_events
+     WHERE site_id = $1 AND event_type='pageview' AND created_at >= NOW() - $2::int * INTERVAL '1 day'
      GROUP BY page ORDER BY vues DESC LIMIT 20`,
     [siteId, days]
   );
@@ -28,8 +28,8 @@ async function getTopSources(req, res) {
   const siteId = req.query.site_id || 1;
   const days = parseInt(req.query.days) || 7;
   const rows = await db.query(
-    `SELECT referrer, COUNT(*) as vues FROM raw_events
-     WHERE site_id = ? AND event_type='pageview' AND referrer != '' AND created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+    `SELECT referrer, COUNT(*)::int as vues FROM raw_events
+     WHERE site_id = $1 AND event_type='pageview' AND referrer != '' AND created_at >= NOW() - $2::int * INTERVAL '1 day'
      GROUP BY referrer ORDER BY vues DESC LIMIT 20`,
     [siteId, days]
   );
@@ -39,7 +39,7 @@ async function getTopSources(req, res) {
 async function getRealtimeCount(req, res) {
   const siteId = req.query.site_id || 1;
   const rows = await db.query(
-    `SELECT COUNT(*) as count FROM active_sessions WHERE site_id = ? AND last_ping > DATE_SUB(NOW(), INTERVAL 5 MINUTE)`,
+    `SELECT COUNT(*)::int as count FROM active_sessions WHERE site_id = $1 AND last_ping > NOW() - INTERVAL '5 minutes'`,
     [siteId]
   );
   res.json({ active: rows[0]?.count || 0 });

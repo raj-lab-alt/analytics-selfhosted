@@ -14,7 +14,7 @@ function setupWebSocket(wss) {
     try {
       const siteIds = [...new Set(clients.values())];
       const rows = await db.query(
-        `SELECT site_id, COUNT(*) as count FROM active_sessions WHERE last_ping > DATE_SUB(NOW(), INTERVAL 5 MINUTE) GROUP BY site_id`
+        `SELECT site_id, COUNT(*)::int as count FROM active_sessions WHERE last_ping > NOW() - INTERVAL '5 minutes' GROUP BY site_id`
       );
       const counts = {};
       rows.forEach(r => counts[r.site_id] = r.count);
@@ -31,7 +31,7 @@ async function getActiveSessions(req, res) {
   const siteId = req.query.site_id || 1;
   const rows = await db.query(
     `SELECT session_id, page, referrer, country, last_ping FROM active_sessions
-     WHERE site_id = ? AND last_ping > DATE_SUB(NOW(), INTERVAL 5 MINUTE)
+     WHERE site_id = $1 AND last_ping > NOW() - INTERVAL '5 minutes'
      ORDER BY last_ping DESC`,
     [siteId]
   );

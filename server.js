@@ -45,9 +45,8 @@ app.get('/install', async (req, res) => {
   if (req.query.key !== (process.env.ADMIN_PASSWORD || 'admin123')) return res.status(403).send('forbidden');
   const fs = require('fs');
   const sql = fs.readFileSync(path.join(__dirname, 'install.sql'), 'utf8');
-  const statements = sql.split(';').filter(s => s.trim());
   try {
-    for (const stmt of statements) await db.query(stmt);
+    await db.query(sql);
     res.send('Tables created successfully');
   } catch (err) {
     res.status(500).send(err.message);

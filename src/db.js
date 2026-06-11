@@ -1,17 +1,16 @@
-const mysql = require('mysql2/promise');
+const { Pool } = require('pg');
 
 let pool;
 
 async function getPool() {
   if (!pool) {
-    pool = mysql.createPool({
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
       host: process.env.DB_HOST || 'localhost',
-      user: process.env.DB_USER || 'root',
+      user: process.env.DB_USER || 'postgres',
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_NAME || 'analytics',
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0
+      max: 10,
     });
   }
   return pool;
@@ -19,13 +18,13 @@ async function getPool() {
 
 async function query(sql, params) {
   const p = await getPool();
-  const [rows] = await p.execute(sql, params);
-  return rows;
+  const result = await p.query(sql, params);
+  return result.rows;
 }
 
 async function insert(sql, params) {
   const p = await getPool();
-  const [result] = await p.execute(sql, params);
+  const result = await p.query(sql, params);
   return result;
 }
 

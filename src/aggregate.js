@@ -11,23 +11,23 @@ async function aggregateHourly() {
     const sites = await db.query('SELECT id FROM sites');
     for (const site of sites) {
       const stats = await db.query(
-        `SELECT COUNT(*) as pages_vues, COUNT(DISTINCT session_id) as sessions,
-                COUNT(DISTINCT ip_hash) as visiteurs
-         FROM raw_events WHERE site_id = ? AND event_type='pageview'
-         AND created_at >= ? AND created_at < ?`,
+        `SELECT COUNT(*)::int as pages_vues, COUNT(DISTINCT session_id)::int as sessions,
+                COUNT(DISTINCT ip_hash)::int as visiteurs
+         FROM raw_events WHERE site_id = $1 AND event_type='pageview'
+         AND created_at >= $2 AND created_at < $3`,
         [site.id, heureStr, heureSuiv]
       );
 
       const topPages = await db.query(
-        `SELECT page, COUNT(*) as vues FROM raw_events
-         WHERE site_id = ? AND event_type='pageview' AND created_at >= ? AND created_at < ?
+        `SELECT page, COUNT(*)::int as vues FROM raw_events
+         WHERE site_id = $1 AND event_type='pageview' AND created_at >= $2 AND created_at < $3
          GROUP BY page ORDER BY vues DESC LIMIT 10`,
         [site.id, heureStr, heureSuiv]
       );
 
       const topSources = await db.query(
-        `SELECT referrer, COUNT(*) as vues FROM raw_events
-         WHERE site_id = ? AND event_type='pageview' AND created_at >= ? AND created_at < ?
+        `SELECT referrer, COUNT(*)::int as vues FROM raw_events
+         WHERE site_id = $1 AND event_type='pageview' AND created_at >= $2 AND created_at < $3
          GROUP BY referrer ORDER BY vues DESC LIMIT 10`,
         [site.id, heureStr, heureSuiv]
       );
@@ -35,9 +35,10 @@ async function aggregateHourly() {
       const s = stats[0] || { pages_vues: 0, sessions: 0, visiteurs: 0 };
       await db.query(
         `INSERT INTO stats_hourly (site_id, heure, pages_vues, visiteurs, sessions, top_pages, top_sources)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE pages_vues=VALUES(pages_vues), visiteurs=VALUES(visiteurs),
-         sessions=VALUES(sessions), top_pages=VALUES(top_pages), top_sources=VALUES(top_sources)`,
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
+         ON CONFLICT (site_id, heure) DO UPDATE SET
+         pages_vues=EXCLUDED.pages_vues, visiteurs=EXCLUDED.visiteurs,
+         sessions=EXCLUDED.sessions, top_pages=EXCLUDED.top_pages, top_sources=EXCLUDED.top_sources`,
         [site.id, heureStr, s.pages_vues, s.visiteurs, s.sessions,
          JSON.stringify(topPages), JSON.stringify(topSources)]
       );
@@ -58,23 +59,23 @@ async function aggregateDaily() {
     const sites = await db.query('SELECT id FROM sites');
     for (const site of sites) {
       const stats = await db.query(
-        `SELECT COUNT(*) as pages_vues, COUNT(DISTINCT session_id) as sessions,
-                COUNT(DISTINCT ip_hash) as visiteurs
-         FROM raw_events WHERE site_id = ? AND event_type='pageview'
-         AND created_at >= ? AND created_at < ?`,
+        `SELECT COUNT(*)::int as pages_vues, COUNT(DISTINCT session_id)::int as sessions,
+                COUNT(DISTINCT ip_hash)::int as visiteurs
+         FROM raw_events WHERE site_id = $1 AND event_type='pageview'
+         AND created_at >= $2 AND created_at < $3`,
         [site.id, jourStr, jourSuiv]
       );
 
       const topPages = await db.query(
-        `SELECT page, COUNT(*) as vues FROM raw_events
-         WHERE site_id = ? AND event_type='pageview' AND created_at >= ? AND created_at < ?
+        `SELECT page, COUNT(*)::int as vues FROM raw_events
+         WHERE site_id = $1 AND event_type='pageview' AND created_at >= $2 AND created_at < $3
          GROUP BY page ORDER BY vues DESC LIMIT 10`,
         [site.id, jourStr, jourSuiv]
       );
 
       const topSources = await db.query(
-        `SELECT referrer, COUNT(*) as vues FROM raw_events
-         WHERE site_id = ? AND event_type='pageview' AND created_at >= ? AND created_at < ?
+        `SELECT referrer, COUNT(*)::int as vues FROM raw_events
+         WHERE site_id = $1 AND event_type='pageview' AND created_at >= $2 AND created_at < $3
          GROUP BY referrer ORDER BY vues DESC LIMIT 10`,
         [site.id, jourStr, jourSuiv]
       );
@@ -82,9 +83,10 @@ async function aggregateDaily() {
       const s = stats[0] || { pages_vues: 0, sessions: 0, visiteurs: 0 };
       await db.query(
         `INSERT INTO stats_daily (site_id, jour, pages_vues, visiteurs, sessions, top_pages, top_sources)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE pages_vues=VALUES(pages_vues), visiteurs=VALUES(visiteurs),
-         sessions=VALUES(sessions), top_pages=VALUES(top_pages), top_sources=VALUES(top_sources)`,
+         VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
+         ON CONFLICT (site_id, jour) DO UPDATE SET
+         pages_vues=EXCLUDED.pages_vues, visiteurs=EXCLUDED.visiteurs,
+         sessions=EXCLUDED.sessions, top_pages=EXCLUDED.top_pages, top_sources=EXCLUDED.top_sources`,
         [site.id, jourStr, s.pages_vues, s.visiteurs, s.sessions,
          JSON.stringify(topPages), JSON.stringify(topSources)]
       );
@@ -97,9 +99,9 @@ async function aggregateDaily() {
 
 async function cleanup() {
   try {
-    await db.query('DELETE FROM raw_events WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)');
-    await db.query('DELETE FROM heatmap_events WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)');
-    await db.query('DELETE FROM active_sessions WHERE last_ping < DATE_SUB(NOW(), INTERVAL 1 HOUR)');
+    await db.query("DELETE FROM raw_events WHERE created_at < NOW() - INTERVAL '90 days'");
+    await db.query("DELETE FROM heatmap_events WHERE created_at < NOW() - INTERVAL '30 days'");
+    await db.query("DELETE FROM active_sessions WHERE last_ping < NOW() - INTERVAL '1 hour'");
   } catch (e) {}
 }
 

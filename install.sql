@@ -1,16 +1,13 @@
-CREATE DATABASE IF NOT EXISTS analytics CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE analytics;
-
 CREATE TABLE IF NOT EXISTS sites (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   name VARCHAR(100) NOT NULL,
   domain VARCHAR(255) NOT NULL,
   api_key VARCHAR(32) NOT NULL UNIQUE,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
+  created_at TIMESTAMP DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS raw_events (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  id BIGSERIAL PRIMARY KEY,
   site_id INT NOT NULL,
   api_key VARCHAR(32) NOT NULL,
   page VARCHAR(500) NOT NULL,
@@ -22,13 +19,13 @@ CREATE TABLE IF NOT EXISTS raw_events (
   screen_w INT DEFAULT 0,
   screen_h INT DEFAULT 0,
   session_id VARCHAR(36) NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_site_created (site_id, created_at),
-  INDEX idx_created (created_at)
-) ENGINE=InnoDB;
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_raw_site_created ON raw_events (site_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_raw_created ON raw_events (created_at);
 
 CREATE TABLE IF NOT EXISTS heatmap_events (
-  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  id BIGSERIAL PRIMARY KEY,
   site_id INT NOT NULL,
   page_url VARCHAR(500) NOT NULL,
   x SMALLINT NOT NULL,
@@ -36,12 +33,12 @@ CREATE TABLE IF NOT EXISTS heatmap_events (
   viewport_w SMALLINT NOT NULL,
   viewport_h SMALLINT NOT NULL,
   scroll_y SMALLINT DEFAULT 0,
-  event_type ENUM('click','move','scroll') NOT NULL,
+  event_type VARCHAR(10) NOT NULL CHECK (event_type IN ('click','move','scroll')),
   session_id VARCHAR(36) NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_site_page (site_id, page_url(255)),
-  INDEX idx_created (created_at)
-) ENGINE=InnoDB;
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_heat_site_page ON heatmap_events (site_id, page_url);
+CREATE INDEX IF NOT EXISTS idx_heat_created ON heatmap_events (created_at);
 
 CREATE TABLE IF NOT EXISTS active_sessions (
   session_id VARCHAR(36) PRIMARY KEY,
@@ -51,34 +48,34 @@ CREATE TABLE IF NOT EXISTS active_sessions (
   country VARCHAR(4) DEFAULT '',
   city VARCHAR(100) DEFAULT '',
   ua TEXT,
-  last_ping DATETIME DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_site (site_id),
-  INDEX idx_last_ping (last_ping)
-) ENGINE=InnoDB;
+  last_ping TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_active_site ON active_sessions (site_id);
+CREATE INDEX IF NOT EXISTS idx_active_last_ping ON active_sessions (last_ping);
 
 CREATE TABLE IF NOT EXISTS stats_hourly (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   site_id INT NOT NULL,
-  heure DATETIME NOT NULL,
+  heure TIMESTAMP NOT NULL,
   pages_vues INT DEFAULT 0,
   visiteurs INT DEFAULT 0,
   sessions INT DEFAULT 0,
   bounce INT DEFAULT 0,
-  top_pages JSON,
-  top_sources JSON,
-  UNIQUE KEY uk_site_heure (site_id, heure)
-) ENGINE=InnoDB;
+  top_pages JSONB,
+  top_sources JSONB,
+  UNIQUE (site_id, heure)
+);
 
 CREATE TABLE IF NOT EXISTS stats_daily (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+  id SERIAL PRIMARY KEY,
   site_id INT NOT NULL,
   jour DATE NOT NULL,
   pages_vues INT DEFAULT 0,
   visiteurs INT DEFAULT 0,
   sessions INT DEFAULT 0,
   bounce INT DEFAULT 0,
-  duree_moyenne FLOAT DEFAULT 0,
-  top_pages JSON,
-  top_sources JSON,
-  UNIQUE KEY uk_site_jour (site_id, jour)
-) ENGINE=InnoDB;
+  duree_moyenne REAL DEFAULT 0,
+  top_pages JSONB,
+  top_sources JSONB,
+  UNIQUE (site_id, jour)
+);

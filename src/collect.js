@@ -17,11 +17,12 @@ async function flushBuffer() {
   const batch = buffer.splice(0);
   bufferSize = 0;
   try {
-    const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(',');
     const values = [];
-    batch.forEach(e => {
+    const placeholders = batch.map((e, i) => {
+      const off = i * 11;
       values.push(e.site_id, e.page, e.referrer, e.ua, e.ip_hash, e.country, e.city, e.screen_w, e.screen_h, e.session_id, e.event_type);
-    });
+      return `($${off + 1}, $${off + 2}, $${off + 3}, $${off + 4}, $${off + 5}, $${off + 6}, $${off + 7}, $${off + 8}, $${off + 9}, $${off + 10}, $${off + 11})`;
+    }).join(',');
     await db.query(
       `INSERT INTO raw_events (site_id, page, referrer, ua, ip_hash, country, city, screen_w, screen_h, session_id, event_type) VALUES ${placeholders}`,
       values
@@ -49,8 +50,8 @@ async function collect(req, res) {
   try {
     await db.query(
       `INSERT INTO active_sessions (session_id, site_id, page, referrer, country, ua, last_ping)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())
-       ON DUPLICATE KEY UPDATE page=VALUES(page), referrer=VALUES(referrer), last_ping=NOW()`,
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+       ON CONFLICT (session_id) DO UPDATE SET page=EXCLUDED.page, referrer=EXCLUDED.referrer, last_ping=NOW()`,
       [session_id, site_id, url || '/', referrer || '', country, ua]
     );
   } catch (e) {}
@@ -59,7 +60,7 @@ async function collect(req, res) {
     try {
       await db.query(
         `INSERT INTO heatmap_events (site_id, page_url, x, y, viewport_w, viewport_h, scroll_y, event_type, session_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [site_id, url || '/', x || 0, y || 0, viewport_w || 0, viewport_h || 0, scroll_y || 0, event_type, session_id]
       );
     } catch (e) {}

@@ -1,8 +1,8 @@
 # Analytics Self-Hosted
 
 ## Stack
-- Node.js (Express), MySQL (mysql2), WebSocket (ws)
-- Hébergement : Hostinger Node.js (ou tout VPS)
+- Node.js (Express), PostgreSQL (pg), WebSocket (ws)
+- Hébergement : Hostinger Node.js + Supabase (PostgreSQL)
 - Frontend : Vanilla JS + Chart.js + heatmap.js
 
 ## Structure
@@ -11,7 +11,7 @@ server.js            → Entry point (Express + WebSocket)
 tracker.js           → Script client à embarquer sur les sites
 install.sql          → Schema MySQL
 src/
-  db.js              → Pool MySQL
+  db.js              → Pool PostgreSQL (pg)
   collect.js         → POST /collect (buffer batch insert)
   realtime.js        → WebSocket + REST endpoint sessions actives
   aggregate.js       → Agrégation horaire/journalière + nettoyage
@@ -28,7 +28,7 @@ dashboard/
 ```
 
 ## Installation
-1. Copier `.env.example` → `.env` et configurer MySQL + mot de passe
+1. Copier `.env.example` → `.env` et configurer PostgreSQL (ou Supabase DATABASE_URL)
 2. `npm install`
 3. Accéder à `http://localhost:3000/install?key=MOT_DE_PASSE_ADMIN` (crée les tables)
 4. Insérer manuellement un site dans la table `sites` (id, name, domain, api_key)
@@ -59,7 +59,7 @@ Sans heatmap :
 - WebSocket `/ws?site_id=1` → Mise à jour temps réel
 
 ## Conventions
-- Pas de dépendances lourdes au-delà de Express, mysql2, ws
+- Pas de dépendances lourdes au-delà de Express, pg, ws
 - Le tracker JS doit rester < 10KB
 - Les mots de passe/tokens dans .env, jamais commités
 - Les données brutes sont purgées après 90 jours
