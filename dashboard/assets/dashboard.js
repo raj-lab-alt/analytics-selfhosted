@@ -62,6 +62,16 @@ async function loadOverview(days) {
   document.getElementById('topSources').innerHTML =
     '<table><thead><tr><th>Source</th><th>Views</th></tr></thead><tbody>' +
     topSources.map(s => '<tr><td>' + (s.referrer || '(direct)') + '</td><td>' + s.vues + '</td></tr>').join('') + '</tbody></table>';
+
+  const traffic = await (await api('/api/traffic-sources?site_id=' + siteId + '&days=' + days)).json();
+  const colors = { direct: '#858796', organic: '#1cc88a', social: '#4e73df', paid: '#e74a3b', referral: '#f6c23e' };
+  document.getElementById('trafficGrid').innerHTML = traffic.map(t =>
+    '<div class="traffic-card" style="border-left:4px solid ' + (colors[t.source] || '#858796') + '">' +
+      '<h3>' + t.source.charAt(0).toUpperCase() + t.source.slice(1) + '</h3>' +
+      '<p class="traffic-count">' + t.count + '</p>' +
+      '<p class="traffic-pct">' + t.pct + '%</p>' +
+    '</div>'
+  ).join('');
 }
 
 document.addEventListener('DOMContentLoaded', function() {

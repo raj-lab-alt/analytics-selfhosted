@@ -25,6 +25,7 @@
     data.site_id = parseInt(siteId);
     data.session_id = sessionId;
     data.started_at = parseInt(sessionStorage.getItem('as_started')) || Date.now();
+    try { var q = new URL(window.location.href).searchParams; var u = q.get('utm_source'); if (u) data.utm_source = u; u = q.get('utm_medium'); if (u) data.utm_medium = u; u = q.get('utm_campaign'); if (u) data.utm_campaign = u; } catch(e) {}
     data.url = cleanUrl(window.location.href);
     data.referrer = document.referrer || '';
     data.screen_w = screen.width;

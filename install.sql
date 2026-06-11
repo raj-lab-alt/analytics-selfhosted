@@ -20,6 +20,10 @@ CREATE TABLE IF NOT EXISTS raw_events (
   screen_h INT DEFAULT 0,
   session_id VARCHAR(36) NOT NULL,
   event_type VARCHAR(10) DEFAULT 'pageview',
+  traffic_source VARCHAR(10) DEFAULT '',
+  utm_source VARCHAR(100) DEFAULT '',
+  utm_medium VARCHAR(100) DEFAULT '',
+  utm_campaign VARCHAR(200) DEFAULT '',
   created_at TIMESTAMP DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_raw_site_created ON raw_events (site_id, created_at);

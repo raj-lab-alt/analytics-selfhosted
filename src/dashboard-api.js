@@ -204,4 +204,36 @@ async function getStats(req, res) {
   res.json({ avgDuration, topReferrers });
 }
 
-module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getVisitorLocations, getSites, createSite, getTopCities, getStats };
+async function getTrafficSources(req, res) {
+  const siteId = req.query.site_id || 1;
+  const days = parseInt(req.query.days) || 7;
+  const supabase = db.getClient();
+  const startDate = new Date(Date.now() - days * 86400000).toISOString();
+  try {
+    const { data } = await supabase
+      .from('raw_events')
+      .select('traffic_source, referrer')
+      .eq('site_id', siteId)
+      .eq('event_type', 'pageview')
+      .gte('created_at', startDate);
+    const counts = { direct: 0, organic: 0, social: 0, paid: 0, referral: 0 };
+    (data || []).forEach(e => {
+      const src = e.traffic_source;
+      if (src && counts[src] !== undefined) counts[src]++;
+      else {
+        // Fallback classification for rows without traffic_source (pre-migration)
+        if (!e.referrer) counts.direct++;
+        else if (['facebook','twitter','instagram','linkedin','pinterest','tiktok','snapchat','youtube','reddit','whatsapp','telegram'].some(d => e.referrer.toLowerCase().includes(d))) counts.social++;
+        else if (['google','bing','yahoo','duckduckgo','yandex','baidu','ecosia','qwant'].some(s => e.referrer.toLowerCase().includes(s))) counts.organic++;
+        else counts.referral++;
+      }
+    });
+    const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+    const result = Object.entries(counts).map(([source, count]) => ({ source, count, pct: Math.round(count / total * 100) })).sort((a, b) => b.count - a.count);
+    res.json(result);
+  } catch (e) {
+    res.json([]);
+  }
+}
+
+module.exports = { getOverview, getTopPages, getTopSources, getRealtimeCount, getHeatmapData, getVisitorLocations, getSites, createSite, getTopCities, getStats, getTrafficSources };
