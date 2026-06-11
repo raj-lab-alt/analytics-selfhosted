@@ -91,13 +91,16 @@ async function getRealtimeCount(req, res) {
 
 async function getHeatmapData(req, res) {
   const siteId = req.query.site_id || 1;
-  const pageUrl = req.query.page || '/';
+  const rawPage = req.query.page || '/';
   const supabase = db.getClient();
+  let path = rawPage;
+  try { const u = new URL(rawPage); path = u.origin + u.pathname; } catch(e) {}
+  const escaped = path.replace(/[%_]/g, '\\$&');
   const { data } = await supabase
     .from('heatmap_events')
     .select('x, y')
     .eq('site_id', siteId)
-    .eq('page_url', pageUrl)
+    .like('page_url', escaped + '%')
     .eq('event_type', 'click');
   const counts = {};
   (data || []).forEach(e => { const k = e.x + ',' + e.y; counts[k] = (counts[k] || 0) + 1; });

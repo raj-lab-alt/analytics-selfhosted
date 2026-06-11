@@ -66,7 +66,14 @@ async function loadPages() {
   try {
     const r = await api('/api/top-pages?site_id=' + siteId + '&days=30');
     const pages = await r.json();
-    sel.innerHTML = pages.map(p => '<option value="' + p.page.replace(/"/g, '&quot;') + '">' + p.page + ' (' + p.vues + ' vues)</option>').join('');
+    const grouped = {};
+    pages.forEach(p => {
+      let key = p.page;
+      try { const u = new URL(p.page); key = u.origin + u.pathname; } catch(e) {}
+      if (!grouped[key]) grouped[key] = { page: key, vues: 0 };
+      grouped[key].vues += p.vues;
+    });
+    sel.innerHTML = Object.values(grouped).map(p => '<option value="' + p.page.replace(/"/g, '&quot;') + '">' + p.page + ' (' + p.vues + ' vues)</option>').join('');
   } catch(e) {}
   loadHeatmap();
 }
