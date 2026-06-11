@@ -46,7 +46,7 @@ async function loadSites() {
       <td>${esc(s.name)}</td>
       <td>${esc(s.domain)}</td>
       <td><code>${esc(s.api_key)}</code></td>
-      <td><code>&lt;script src="https://analytics.curtexrm.com/tracker.js" data-site="${s.id}" defer&gt;&lt;/script&gt;</code></td>
+      <td><code>&lt;script src="https://analytics.curtexrm.com/tracker.js" data-site="${s.id}" data-api="https://analytics.curtexrm.com/collect" defer&gt;&lt;/script&gt;</code></td>
     </tr>
   `).join('');
 }

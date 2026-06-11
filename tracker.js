@@ -4,7 +4,7 @@
   var heatmap = script && script.getAttribute('data-heatmap') === 'true';
   if (!siteId) return;
 
-  var apiUrl = script.getAttribute('data-api') || '/collect';
+  var apiUrl = script.getAttribute('data-api') || script.src.replace('/tracker.js', '/collect');
   var sessionId = sessionStorage.getItem('as_sid');
   if (!sessionId) {
     sessionId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2) + Date.now().toString(36);
