@@ -55,7 +55,7 @@ async function createQuotaOps(recetteId, recetteAmount, recetteLibelle, colis, l
   const ops = [];
   let reste = recetteAmount;
 
-  // Associés (formule fixe)
+  // Associés (formule fixe) — IN sur caisse associes
   const aQuota = quotas['associes'];
   const aVal = aQuota ? parseFloat(aQuota.valeur) : 0;
   let associesAmount = 0;
@@ -65,7 +65,7 @@ async function createQuotaOps(recetteId, recetteAmount, recetteLibelle, colis, l
       ops.push({
         operation_date: new Date().toISOString().slice(0, 10),
         libelle: 'Quote-part livreurs: ' + recetteLibelle,
-        type: 'out',
+        type: 'in',
         amount: associesAmount,
         currency: 'TND',
         caisse: 'associes',
@@ -76,7 +76,7 @@ async function createQuotaOps(recetteId, recetteAmount, recetteLibelle, colis, l
     }
   }
 
-  // Pourcentages sur le reste
+  // Pourcentages sur le reste — IN sur chaque caisse
   if (reste > 0) {
     for (const c of QUOTA_CAISSES) {
       if (c === 'associes') continue;
@@ -89,7 +89,7 @@ async function createQuotaOps(recetteId, recetteAmount, recetteLibelle, colis, l
         ops.push({
           operation_date: new Date().toISOString().slice(0, 10),
           libelle: 'Quote-part ' + CAISSE_LABELS[c] + ': ' + recetteLibelle,
-          type: 'out',
+          type: 'in',
           amount: Math.round(amt * 1000) / 1000,
           currency: 'TND',
           caisse: c,
@@ -98,6 +98,21 @@ async function createQuotaOps(recetteId, recetteAmount, recetteLibelle, colis, l
         });
       }
     }
+  }
+
+  // OUT global depuis recettes (total distribué)
+  const totalDistributed = associesAmount + ops.filter(o => o.caisse !== 'associes').reduce((s, o) => s + o.amount, 0);
+  if (totalDistributed > 0) {
+    ops.push({
+      operation_date: new Date().toISOString().slice(0, 10),
+      libelle: 'Répartition quote-parts: ' + recetteLibelle,
+      type: 'out',
+      amount: Math.round(totalDistributed * 1000) / 1000,
+      currency: 'TND',
+      caisse: 'recettes',
+      parent_id: recetteId,
+      note: 'Auto (total distribué)',
+    });
   }
 
   return ops;
