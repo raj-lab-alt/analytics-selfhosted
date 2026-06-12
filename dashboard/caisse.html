@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="/assets/dashboard.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
+.fb-notif { background:#fef3cd; border:1px solid #fde68a; border-radius:8px; padding:12px 16px; margin-bottom:16px; font-weight:700; font-size:14px; color:#92400e; display:none; align-items:center; gap:8px }
 .caisse-tabs { display:flex; gap:0; margin-bottom:16px; flex-wrap:wrap }
 .caisse-tabs a { padding:8px 16px; border:1px solid #ddd; background:#f9f9f9; text-decoration:none; color:#333; font-size:13px; font-weight:500 }
 .caisse-tabs a:first-child { border-radius:6px 0 0 6px }
@@ -89,6 +90,8 @@
 <main class="container">
   <h1>Gestion de caisse</h1>
 
+  <div id="fbNotif" class="fb-notif"><span>🔔</span> Seuil atteint — Achetez points FB</div>
+
   <!-- Onglets -->
   <div class="caisse-tabs" id="caisseTabs">
     <a href="#" data-caisse="new-op" class="active tab-new-op">+ Opération</a>
@@ -155,6 +158,7 @@ function render() {
   else if (currentTab === 'paiements') renderPaiements();
   else if (currentTab === 'config') renderConfig();
   else renderNormalView();
+  checkMediaBuyThreshold();
 }
 
 // --- New Operation Tab ---
@@ -319,6 +323,7 @@ function submitForm(e) {
     document.getElementById('quotaFields').style.display = 'none';
     document.getElementById('quotaPreview').style.display = 'none';
     document.getElementById('fDate').value = todayFR();
+    checkMediaBuyThreshold();
   });
 }
 
@@ -443,6 +448,7 @@ function validerPaiement() {
       document.getElementById('paiementColis').value = '';
       document.getElementById('paiementBreakdown').innerHTML = '';
       btn.disabled = true;
+      checkMediaBuyThreshold();
     });
   }).catch(function(e) {
     msg.className = 'paiement-msg error';
@@ -740,7 +746,16 @@ function editOp(id) {
 
 function deleteOp(id) {
   if (!confirm('Supprimer cette opération ? Les écritures de quota liées seront aussi supprimées.')) return;
-  apiP('/api/caisse/operations/' + id, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() { if (currentTab !== 'new-op' && currentTab !== 'config') renderNormalView(); });
+  apiP('/api/caisse/operations/' + id, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() { if (currentTab !== 'new-op' && currentTab !== 'config') renderNormalView(); checkMediaBuyThreshold(); });
+}
+
+function checkMediaBuyThreshold() {
+  apiP('/api/caisse/summary').then(function(r) { return r.json(); }).then(function(sum) {
+    var el = document.getElementById('fbNotif');
+    if (!el) return;
+    var bal = sum.caisses && sum.caisses.media_buy && sum.caisses.media_buy.balance || 0;
+    el.style.display = bal >= 380 ? 'flex' : 'none';
+  }).catch(function() {});
 }
 
 function switchTab(caisse) {

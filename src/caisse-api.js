@@ -12,6 +12,13 @@ function fmtFR(d) {
   const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? m[3] + '/' + m[2] + '/' + m[1] : d;
 }
+function parseDate(d) {
+  if (!d) return new Date().toISOString().slice(0, 10);
+  const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return m[3] + '-' + m[2].padStart(2,'0') + '-' + m[1].padStart(2,'0');
+  if (d.match(/^\d{4}-\d{2}-\d{2}$/)) return d;
+  return new Date().toISOString().slice(0, 10);
+}
 function fmtAmount(n) { return Number(n).toFixed(3); }
 
 function applyFilters(q, query) {
@@ -148,7 +155,7 @@ router.post('/operations', async (req, res) => {
     if (b.type !== 'in' && b.type !== 'out') return res.status(400).json({ error: 'Type invalide' });
     const amt = parseFloat(b.amount);
     if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: 'Montant invalide' });
-    const opDate = b.operation_date || new Date().toISOString().slice(0, 10);
+    const opDate = parseDate(b.operation_date);
 
     const insertBody = {
       operation_date: opDate,
@@ -202,7 +209,7 @@ router.put('/operations/:id', async (req, res) => {
     if (CAISSES.includes(b.caisse)) upd.caisse = b.caisse;
     if (b.type === 'in' || b.type === 'out') upd.type = b.type;
     if (b.amount !== undefined) { const a = parseFloat(b.amount); if (!isNaN(a) && a > 0) upd.amount = a; }
-    if (b.operation_date) upd.operation_date = b.operation_date;
+    if (b.operation_date) upd.operation_date = parseDate(b.operation_date);
     if (b.payment_method !== undefined) upd.payment_method = b.payment_method.trim();
     if (b.reference !== undefined) upd.reference = b.reference.trim();
     if (b.note !== undefined) upd.note = b.note.trim();
