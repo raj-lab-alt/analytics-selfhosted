@@ -13,6 +13,21 @@
 .caisse-tabs a:last-child { border-radius:0 6px 6px 0 }
 .caisse-tabs a.active { background:#4e73df; color:#fff; border-color:#4e73df }
 .caisse-tabs a:not(.active):hover { background:#e8e8e8 }
+.caisse-tabs a.tab-new-op { background:#fffbeb; border-color:#fde68a; font-weight:700 }
+.caisse-tabs a.tab-new-op.active { background:#4e73df; color:#fff; border-color:#4e73df }
+.caisse-tabs a.tab-paiements { background:#eff6ff; border-color:#bfdbfe }
+.caisse-tabs a.tab-paiements.active { background:#4e73df; color:#fff; border-color:#4e73df }
+
+.paiement-card { background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px; padding:16px; margin-bottom:12px }
+.paiement-card h3 { margin:0 0 12px; font-size:15px; color:#111827 }
+.paiement-input { font-size:24px; font-weight:700; padding:12px 16px; border:2px solid #4e73df; border-radius:8px; width:100%; box-sizing:border-box; text-align:center; outline:none }
+.paiement-input:focus { border-color:#2e59d9; box-shadow:0 0 0 3px rgba(78,115,223,0.15) }
+.paiement-breakdown { margin-top:12px }
+.paiement-row { display:flex; justify-content:space-between; padding:6px 0; border-bottom:1px solid #e5e7eb; font-size:14px }
+.paiement-row.total { font-weight:700; border-top:2px solid #4e73df; border-bottom:none; margin-top:4px; padding-top:8px; font-size:15px }
+.paiement-msg { padding:10px 14px; border-radius:6px; margin-top:10px; font-size:13px; font-weight:600; display:none }
+.paiement-msg.success { background:#d4edda; color:#155724; border:1px solid #c3e6cb; display:block }
+.paiement-msg.error { background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; display:block }
 
 .caisse-form { display:grid; grid-template-columns:1fr 1fr; gap:8px 24px }
 .caisse-form .full { grid-column:1/-1 }
@@ -76,7 +91,8 @@
 
   <!-- Onglets -->
   <div class="caisse-tabs" id="caisseTabs">
-    <a href="#" data-caisse="new-op" class="active" style="background:#fffbeb;border-color:#fde68a;font-weight:700">+ Opération</a>
+    <a href="#" data-caisse="new-op" class="active tab-new-op">+ Opération</a>
+    <a href="#" data-caisse="paiements" class="tab-paiements">Paiements</a>
     <a href="#" data-caisse="">Centrale</a>
     <a href="#" data-caisse="recettes">Recettes</a>
     <a href="#" data-caisse="associes">Associés</a>
@@ -136,6 +152,7 @@ document.querySelectorAll('.caisse-tabs a').forEach(function(a) {
 
 function render() {
   if (currentTab === 'new-op') renderNewOp();
+  else if (currentTab === 'paiements') renderPaiements();
   else if (currentTab === 'config') renderConfig();
   else renderNormalView();
 }
@@ -149,8 +166,8 @@ function renderNewOp() {
   html += '<p><label>Date</label><input type="text" id="fDate" class="input" placeholder="jj/mm/aaaa" required></p>';
   html += '<p><label>Libellé <span style="color:#e74a3b">*</span></label><input type="text" id="fLibelle" class="input" placeholder="Description" required></p>';
   html += '<div class="full amount-row">';
-  html += '<div class="amount-field in"><label>Recette (Entrée)</label><input type="number" id="fAmountIn" step="0.001" min="0" placeholder="0.000"></div>';
   html += '<div class="amount-field out"><label>Dépense (Sortie)</label><input type="number" id="fAmountOut" step="0.001" min="0" placeholder="0.000"></div>';
+  html += '<div class="amount-field in"><label>Recette (Entrée)</label><input type="number" id="fAmountIn" step="0.001" min="0" placeholder="0.000"></div>';
   html += '</div>';
   // Colis / livreurs (visible only for recette)
   html += '<div class="full" id="quotaFields" style="display:none">';
@@ -307,6 +324,120 @@ function cancelEdit() {
   document.getElementById('editId').value = '';
   document.getElementById('formSubmit').textContent = 'Enregistrer';
   document.getElementById('formCancel').style.display = 'none';
+}
+
+// --- Paiements Tab ---
+function renderPaiements() {
+  document.getElementById('exportBar').style.display = 'none';
+  var html = '<div class="card">';
+  html += '<h2>Encaisser un paiement</h2>';
+  html += '<div class="paiement-card">';
+  html += '<h3>Montant du paiement (TND)</h3>';
+  html += '<input type="number" id="paiementMontant" class="paiement-input" step="0.001" min="0" placeholder="0.000">';
+  html += '<div id="paiementBreakdown" class="paiement-breakdown"></div>';
+  html += '<div id="paiementMsg" class="paiement-msg"></div>';
+  html += '<p style="margin-top:12px"><button class="btn btn-primary" id="paiementBtn" onclick="validerPaiement()" disabled>Valider</button></p>';
+  html += '</div></div>';
+  document.getElementById('caisseContent').innerHTML = html;
+
+  document.getElementById('paiementMontant').addEventListener('input', function() {
+    var amt = parseFloat(this.value) || 0;
+    document.getElementById('paiementBtn').disabled = amt <= 0;
+    if (amt > 0) updatePaiementBreakdown(amt);
+    else document.getElementById('paiementBreakdown').innerHTML = '';
+    document.getElementById('paiementMsg').style.display = 'none';
+  });
+}
+
+function updatePaiementBreakdown(amount) {
+  apiP('/api/caisse/config').then(function(r) { return r.json(); }).then(function(cfg) {
+    var qm = {};
+    (cfg.quotas || []).forEach(function(q) { qm[q.caisse] = q; });
+    var html = '<div style="margin-top:8px;font-size:13px;color:#666;font-weight:600">Répartition</div>';
+
+    var associesQ = qm['associes'];
+    var associesVal = 0;
+    if (associesQ && associesQ.type === 'formule' && associesQ.valeur2) {
+      var nbAssocies = parseInt(associesQ.valeur2) || 0;
+      var taux = parseFloat(associesQ.valeur) || 1;
+      associesVal = nbAssocies * taux;
+      html += '<div class="paiement-row"><span>Associés (' + nbAssocies + ' × ' + taux.toFixed(3) + ' DT)</span><span style="color:#e74a3b">-' + associesVal.toFixed(3) + '</span></div>';
+    }
+    var reste = amount - associesVal;
+    if (reste < 0) reste = 0;
+    html += '<div class="paiement-row"><span>Reste à répartir</span><span>' + reste.toFixed(3) + '</span></div>';
+
+    var totalPct = 0;
+    QUOTA_CAISSES.forEach(function(c) {
+      if (c === 'associes') return;
+      var q = qm[c];
+      if (!q || q.type !== 'pourcentage') return;
+      var pct = parseFloat(q.valeur) || 0;
+      if (pct <= 0) return;
+      totalPct += pct;
+      var amt = reste * pct / 100;
+      html += '<div class="paiement-row"><span>' + (CAISSE_LABELS[c]||c) + ' (' + pct + '%)</span><span style="color:#e74a3b">-' + amt.toFixed(3) + '</span></div>';
+    });
+
+    var net = amount - associesVal;
+    QUOTA_CAISSES.forEach(function(c) {
+      if (c === 'associes') return;
+      var q = qm[c];
+      if (!q || q.type !== 'pourcentage') return;
+      var pct = parseFloat(q.valeur) || 0;
+      if (pct <= 0) return;
+      net -= reste * pct / 100;
+    });
+    html += '<div class="paiement-row total"><span>Recette nette</span><span>' + net.toFixed(3) + '</span></div>';
+    if (totalPct > 100) html += '<div style="color:#e74a3b;font-size:11px;margin-top:4px">⚠ Somme des % dépasse 100 %</div>';
+
+    document.getElementById('paiementBreakdown').innerHTML = html;
+  }).catch(function() {});
+}
+
+function validerPaiement() {
+  var amt = parseFloat(document.getElementById('paiementMontant').value) || 0;
+  if (amt <= 0) return;
+  var btn = document.getElementById('paiementBtn');
+  var msg = document.getElementById('paiementMsg');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+
+  var today = new Date();
+  var dateStr = String(today.getDate()).padStart(2,'0')+'/'+String(today.getMonth()+1).padStart(2,'0')+'/'+today.getFullYear();
+
+  apiP('/api/caisse/config').then(function(r) { return r.json(); }).then(function(cfg) {
+    var qm = {};
+    (cfg.quotas || []).forEach(function(q) { qm[q.caisse] = q; });
+    var associesQ = qm['associes'];
+    var colis = 1;
+    var livreurs = parseInt(associesQ && associesQ.valeur2) || 0;
+
+    var body = {
+      operation_date: dateStr,
+      libelle: 'Encaissement paiement',
+      type: 'in',
+      amount: amt,
+      caisse: 'recettes',
+      colis: colis,
+      livreurs: livreurs,
+      appliquer_quotas: true,
+    };
+
+    return apiP('/api/caisse/operations', { method: 'POST', body: JSON.stringify(body) }).then(function(r) {
+      if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Erreur'); });
+      msg.className = 'paiement-msg success';
+      msg.textContent = '✓ Paiement enregistré avec succès';
+      document.getElementById('paiementMontant').value = '';
+      document.getElementById('paiementBreakdown').innerHTML = '';
+      btn.disabled = true;
+    });
+  }).catch(function(e) {
+    msg.className = 'paiement-msg error';
+    msg.textContent = '✗ Erreur : ' + (e.message || 'Échec de l\'enregistrement');
+  }).finally(function() {
+    btn.textContent = 'Valider';
+  });
 }
 
 // --- Normal Tab View (Centrale / per-caisse) ---
