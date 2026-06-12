@@ -657,19 +657,12 @@ router.get('/benefices/current', async (req, res) => {
       .lt('operation_date', fin);
     if (error) throw error;
 
-    // Calculate solde for achats and associes (excluding advances)
+    // Calculate solde for achats and associes (all operations)
     let soldeAchats = 0, soldeAssocies = 0;
     (ops || []).forEach(r => {
       const amt = parseFloat(r.amount) || 0;
-      if (r.caisse === 'achats') {
-        // Ignore advances recorded in this caisse for the benefit calc
-        if (r.note && r.note.startsWith('Avance associé')) return;
-        soldeAchats += r.type === 'in' ? amt : -amt;
-      }
-      if (r.caisse === 'associes') {
-        if (r.note && r.note.startsWith('Avance associé')) return;
-        soldeAssocies += r.type === 'in' ? amt : -amt;
-      }
+      if (r.caisse === 'achats') soldeAchats += r.type === 'in' ? amt : -amt;
+      if (r.caisse === 'associes') soldeAssocies += r.type === 'in' ? amt : -amt;
     });
 
     const beneficeBrut = soldeAchats + soldeAssocies;
@@ -730,8 +723,8 @@ router.post('/benefices/calculer', async (req, res) => {
       let sa = 0, so = 0;
       (ops || []).forEach(r => {
         const amt = parseFloat(r.amount) || 0;
-        if (r.caisse === 'achats' && (!r.note || !r.note.startsWith('Avance associé'))) sa += r.type === 'in' ? amt : -amt;
-        if (r.caisse === 'associes' && (!r.note || !r.note.startsWith('Avance associé'))) so += r.type === 'in' ? amt : -amt;
+        if (r.caisse === 'achats') sa += r.type === 'in' ? amt : -amt;
+        if (r.caisse === 'associes') so += r.type === 'in' ? amt : -amt;
       });
       const bb = sa + so;
       const { data: associes } = await db.getClient().from('caisse_associes').select('*').eq('actif', true);
