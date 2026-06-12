@@ -118,11 +118,13 @@ router.put('/config', async (req, res) => {
       const typ = u.type === 'formule' ? 'formule' : 'pourcentage';
       const val = parseFloat(u.valeur);
       if (isNaN(val) || val < 0) continue;
-      const { error } = await db.getClient().from('caisse_quotas').upsert({
+      const insert = {
         caisse: u.caisse,
         type: typ,
         valeur: typ === 'pourcentage' ? Math.min(val, 100) : val,
-      }, { onConflict: 'caisse' });
+      };
+      if (u.valeur2 !== undefined) insert.valeur2 = parseFloat(u.valeur2) || null;
+      const { error } = await db.getClient().from('caisse_quotas').upsert(insert, { onConflict: 'caisse' });
       if (error) throw error;
     }
     // Re-fetch

@@ -4,14 +4,16 @@ CREATE TABLE IF NOT EXISTS caisse_quotas (
   caisse VARCHAR(20) NOT NULL UNIQUE,
   type VARCHAR(15) NOT NULL DEFAULT 'pourcentage' CHECK (type IN ('pourcentage','formule')),
   valeur DECIMAL(10,2) NOT NULL DEFAULT 0,
+  valeur2 DECIMAL(10,2) DEFAULT NULL,
   updated_at TIMESTAMP DEFAULT NOW()
 );
-INSERT INTO caisse_quotas (caisse, type, valeur) VALUES
-  ('associes','formule',1.00),
-  ('media_buy','pourcentage',20.00),
-  ('loyer_charges','pourcentage',10.00),
-  ('achats','pourcentage',40.00)
+INSERT INTO caisse_quotas (caisse, type, valeur, valeur2) VALUES
+  ('associes','formule',1.00,0),
+  ('media_buy','pourcentage',20.00,NULL),
+  ('loyer_charges','pourcentage',10.00,NULL),
+  ('achats','pourcentage',40.00,NULL)
 ON CONFLICT (caisse) DO NOTHING;
+ALTER TABLE caisse_quotas ADD COLUMN IF NOT EXISTS valeur2 DECIMAL(10,2) DEFAULT NULL;
 ALTER TABLE caisse_operations ADD COLUMN IF NOT EXISTS parent_id BIGINT DEFAULT NULL;
 ALTER TABLE caisse_operations ADD COLUMN IF NOT EXISTS colis INT DEFAULT NULL;
 ALTER TABLE caisse_operations ADD COLUMN IF NOT EXISTS livreurs INT DEFAULT NULL;
