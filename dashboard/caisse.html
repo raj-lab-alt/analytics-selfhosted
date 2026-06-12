@@ -146,7 +146,6 @@ function todayFR() {
 }
 function qs() {
   var p = new URLSearchParams();
-  if (currentTab && currentTab !== 'new-op' && currentTab !== 'config' && currentTab !== 'benefices') p.set('caisse', currentTab);
   return p.toString();
 }
 

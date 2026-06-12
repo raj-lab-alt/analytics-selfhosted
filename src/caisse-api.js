@@ -22,7 +22,8 @@ function parseDate(d) {
 function fmtAmount(n) { return Number(n).toFixed(3); }
 
 function applyFilters(q, query) {
-  if (CAISSES.includes(query.caisse)) q = q.eq('caisse', query.caisse);
+  var c = Array.isArray(query.caisse) ? query.caisse[0] : query.caisse;
+  if (CAISSES.includes(c)) q = q.eq('caisse', c);
   if (query.type === 'in' || query.type === 'out') q = q.eq('type', query.type);
   if (query.date_from) q = q.gte('operation_date', query.date_from);
   if (query.date_to) q = q.lte('operation_date', query.date_to);
