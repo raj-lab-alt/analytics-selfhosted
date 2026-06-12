@@ -649,22 +649,32 @@ router.get('/benefices/current', async (req, res) => {
     const debut = mois + '-01';
     const fin = new Date(new Date(debut).getTime() + 32 * 86400000).toISOString().slice(0, 10);
 
-    // Fetch ALL operations (no date filter) for current solde
+    // Fetch ALL operations for current solde
     const { data: ops, error } = await db.getClient()
       .from('caisse_operations')
-      .select('caisse, type, amount, note');
+      .select('caisse, type, amount');
     if (error) throw error;
 
-    // Calculate solde for achats and associes (excluding advances)
+    // Calculate solde for achats and associes (all operations, advances included)
     let soldeAchats = 0, soldeAssocies = 0;
     (ops || []).forEach(r => {
       const amt = parseFloat(r.amount) || 0;
-      if (r.note && r.note.startsWith('Avance associé')) return;
       if (r.caisse === 'achats') soldeAchats += r.type === 'in' ? amt : -amt;
       if (r.caisse === 'associes') soldeAssocies += r.type === 'in' ? amt : -amt;
     });
 
-    const beneficeBrut = soldeAchats + soldeAssocies;
+    const soldeTotal = soldeAchats + soldeAssocies;
+
+    // Fetch total unsettled advances (to reintegrate into benefit)
+    const { data: unsettled, error: ue } = await db.getClient()
+      .from('caisse_avances')
+      .select('montant')
+      .eq('rembourse', false);
+    if (ue) throw ue;
+    const totalAvancesNonReglees = (unsettled || []).reduce((s, a) => s + parseFloat(a.montant), 0);
+
+    // Bénéfice brut = solde des caisses + avances non réglées
+    const beneficeBrut = soldeTotal + totalAvancesNonReglees;
 
     // Fetch associates
     const { data: associes, error: ae } = await db.getClient().from('caisse_associes').select('*').eq('actif', true).order('nom');
@@ -704,6 +714,7 @@ router.get('/benefices/current', async (req, res) => {
       mois,
       solde_achats: Math.round(soldeAchats * 1000) / 1000,
       solde_associes: Math.round(soldeAssocies * 1000) / 1000,
+      avances_non_reglees: Math.round(totalAvancesNonReglees * 1000) / 1000,
       benefice_brut: Math.round(beneficeBrut * 1000) / 1000,
       details,
     });
@@ -718,15 +729,16 @@ router.post('/benefices/calculer', async (req, res) => {
     const previewResp = await (async () => {
       const debut = mois + '-01';
       const fin = new Date(new Date(debut).getTime() + 32 * 86400000).toISOString().slice(0, 10);
-      const { data: ops } = await db.getClient().from('caisse_operations').select('caisse, type, amount, note');
+      const { data: ops } = await db.getClient().from('caisse_operations').select('caisse, type, amount');
       let sa = 0, so = 0;
       (ops || []).forEach(r => {
         const amt = parseFloat(r.amount) || 0;
-        if (r.note && r.note.startsWith('Avance associé')) return;
         if (r.caisse === 'achats') sa += r.type === 'in' ? amt : -amt;
         if (r.caisse === 'associes') so += r.type === 'in' ? amt : -amt;
       });
-      const bb = sa + so;
+      const { data: unsettled } = await db.getClient().from('caisse_avances').select('montant').eq('rembourse', false);
+      const totalUnsettled = (unsettled || []).reduce((s, a) => s + parseFloat(a.montant), 0);
+      const bb = sa + so + totalUnsettled;
       const { data: associes } = await db.getClient().from('caisse_associes').select('*').eq('actif', true);
       const { data: avances } = await db.getClient().from('caisse_avances').select('associe_id, montant').eq('rembourse', false).gte('date_avance', debut).lt('date_avance', fin);
       const byAssoc = {};
