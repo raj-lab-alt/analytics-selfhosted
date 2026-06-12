@@ -124,6 +124,7 @@ router.put('/config', async (req, res) => {
         valeur: typ === 'pourcentage' ? Math.min(val, 100) : val,
       };
       if (u.valeur2 !== undefined) insert.valeur2 = parseFloat(u.valeur2) || null;
+      if (u.valeur3 !== undefined) insert.valeur3 = parseFloat(u.valeur3) || null;
       const { error } = await db.getClient().from('caisse_quotas').upsert(insert, { onConflict: 'caisse' });
       if (error) throw error;
     }

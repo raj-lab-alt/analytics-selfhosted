@@ -162,13 +162,14 @@ CREATE TABLE IF NOT EXISTS caisse_quotas (
   type VARCHAR(15) NOT NULL DEFAULT 'pourcentage' CHECK (type IN ('pourcentage','formule')),
   valeur DECIMAL(10,2) NOT NULL DEFAULT 0,
   valeur2 DECIMAL(10,2) DEFAULT NULL,
+  valeur3 DECIMAL(10,2) DEFAULT NULL,
   updated_at TIMESTAMP DEFAULT NOW()
 );
-INSERT INTO caisse_quotas (caisse, type, valeur, valeur2) VALUES
-  ('associes','formule',1.00,0),
-  ('media_buy','pourcentage',20.00,NULL),
-  ('loyer_charges','pourcentage',10.00,NULL),
-  ('achats','pourcentage',40.00,NULL)
+INSERT INTO caisse_quotas (caisse, type, valeur, valeur2, valeur3) VALUES
+  ('associes','formule',1.00,2,0),
+  ('media_buy','pourcentage',20.00,NULL,NULL),
+  ('loyer_charges','pourcentage',10.00,NULL,NULL),
+  ('achats','pourcentage',40.00,NULL,NULL)
 ON CONFLICT (caisse) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS caisse_operations (

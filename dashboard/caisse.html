@@ -191,12 +191,14 @@ function renderNewOp() {
 
   bindFormEvents();
   document.getElementById('fDate').value = todayFR();
-  // Pre-fill nombre d'associés from config
+  // Pre-fill colis and livreurs from config
   apiP('/api/caisse/config').then(function(r) { return r.json(); }).then(function(cfg) {
     var associes = (cfg.quotas || []).find(function(q) { return q.caisse === 'associes'; });
-    if (associes && associes.valeur2) {
-      var el = document.getElementById('fLivreurs');
-      if (el) el.value = parseInt(associes.valeur2) || 0;
+    if (associes) {
+      var elColis = document.getElementById('fColis');
+      if (elColis && associes.valeur3) elColis.value = parseInt(associes.valeur3) || 0;
+      var elLiv = document.getElementById('fLivreurs');
+      if (elLiv && associes.valeur2) elLiv.value = parseInt(associes.valeur2) || 0;
     }
   }).catch(function() {});
 }
@@ -358,10 +360,11 @@ function updatePaiementBreakdown(amount) {
     var associesQ = qm['associes'];
     var associesVal = 0;
     if (associesQ && associesQ.type === 'formule' && associesQ.valeur2) {
+      var nbColis = parseInt(associesQ.valeur3) || 0;
       var nbAssocies = parseInt(associesQ.valeur2) || 0;
       var taux = parseFloat(associesQ.valeur) || 1;
-      associesVal = nbAssocies * taux;
-      html += '<div class="paiement-row"><span>Associés (' + nbAssocies + ' × ' + taux.toFixed(3) + ' DT)</span><span style="color:#e74a3b">-' + associesVal.toFixed(3) + '</span></div>';
+      associesVal = nbColis * nbAssocies * taux;
+      html += '<div class="paiement-row"><span>Associés (' + nbColis + ' colis × ' + nbAssocies + ' assoc. × ' + taux.toFixed(3) + ' DT)</span><span style="color:#e74a3b">-' + associesVal.toFixed(3) + '</span></div>';
     }
     var reste = amount - associesVal;
     if (reste < 0) reste = 0;
@@ -410,7 +413,7 @@ function validerPaiement() {
     var qm = {};
     (cfg.quotas || []).forEach(function(q) { qm[q.caisse] = q; });
     var associesQ = qm['associes'];
-    var colis = 1;
+    var colis = parseInt(associesQ && associesQ.valeur3) || 0;
     var livreurs = parseInt(associesQ && associesQ.valeur2) || 0;
 
     var body = {
@@ -573,10 +576,12 @@ function renderConfig() {
       if (c === 'associes') {
         var val = parseFloat(q.valeur) || 1;
         var val2 = parseFloat(q.valeur2) || 2;
-        rows += '<tr><td><strong>'+esc(CAISSE_LABELS[c]||c)+'</strong></td><td>Formule (colis × livreurs × taux)</td>';
-        rows += '<td>Taux: <input type="number" id="qc_'+c+'" class="input" step="0.01" min="0" value="'+val.toFixed(2)+'" style="width:70px"> DT / colis×livreur<br>';
-        rows += 'Nb associés: <input type="number" id="qc_'+c+'_v2" class="input" step="1" min="1" value="'+val2+'" style="width:60px"></td>';
-        rows += '<td style="font-size:12px;color:#666">Nombre d\'associés/livreurs par défaut</td></tr>';
+        var val3 = parseFloat(q.valeur3) || 0;
+        rows += '<tr><td><strong>'+esc(CAISSE_LABELS[c]||c)+'</strong></td><td>Formule (colis × associés × taux)</td>';
+        rows += '<td>Colis: <input type="number" id="qc_'+c+'_v3" class="input" step="1" min="1" value="'+val3+'" style="width:55px"> × ';
+        rows += 'Associés: <input type="number" id="qc_'+c+'_v2" class="input" step="1" min="1" value="'+val2+'" style="width:55px"> × ';
+        rows += 'Taux: <input type="number" id="qc_'+c+'" class="input" step="0.01" min="0" value="'+val.toFixed(2)+'" style="width:60px"> DT</td>';
+        rows += '<td style="font-size:12px;color:#666">Valeurs par défaut (colis, associés, taux)</td></tr>';
       } else {
         var val = parseFloat(q.valeur) || 0;
         totalPct += val;
@@ -620,8 +625,10 @@ function saveConfig() {
     var val = parseFloat(el.value) || 0;
     if (c === 'associes') {
       var el2 = document.getElementById('qc_'+c+'_v2');
+      var el3 = document.getElementById('qc_'+c+'_v3');
       var val2 = parseInt(el2.value) || 0;
-      updates.push({ caisse: c, type: 'formule', valeur: val, valeur2: val2 });
+      var val3 = parseInt(el3.value) || 0;
+      updates.push({ caisse: c, type: 'formule', valeur: val, valeur2: val2, valeur3: val3 });
     } else updates.push({ caisse: c, type: 'pourcentage', valeur: val });
   });
   apiP('/api/caisse/config', { method: 'PUT', body: JSON.stringify(updates) }).then(function(r) {
