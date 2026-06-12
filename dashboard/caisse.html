@@ -74,6 +74,8 @@
 .pagination a { padding:4px 10px; border:1px solid #ddd; border-radius:4px; text-decoration:none; color:#333 }
 .pagination a.active { background:#4e73df; color:#fff; border-color:#4e73df }
 .filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px }
+.highlight-row { animation:hlFade 5s ease-out }
+@keyframes hlFade { 0% { background:#fef3cd } 100% { background:inherit } }
 @media(max-width:600px){ .caisse-form { grid-template-columns:1fr } .insights-grid { grid-template-columns:1fr } }
 </style>
 </head>
@@ -323,7 +325,18 @@ function submitForm(e) {
     document.getElementById('quotaFields').style.display = 'none';
     document.getElementById('quotaPreview').style.display = 'none';
     document.getElementById('fDate').value = todayFR();
-    if (window._previousTab) { switchTab(window._previousTab); window._previousTab = null; } else { render(); }
+    if (window._previousTab) {
+      var tab = window._previousTab;
+      var page = window._previousPage || 1;
+      window._previousTab = null;
+      window._previousPage = null;
+      document.querySelectorAll('.caisse-tabs a').forEach(function(a) {
+        a.classList.toggle('active', a.dataset.caisse === tab);
+      });
+      currentTab = tab;
+      currentPage = page;
+      render();
+    } else { render(); }
     checkMediaBuyThreshold();
   });
 }
@@ -676,7 +689,7 @@ function loadOps() {
       if (!ops.length) h = '<tr><td colspan="6" style="color:#888;text-align:center">Aucune opération</td></tr>';
       else ops.forEach(function(o) {
         var isIn = o.type === 'in';
-        h += '<tr class="'+(isIn?'in':'out')+'">';
+        h += '<tr id="opRow_'+o.id+'" class="'+(isIn?'in':'out')+'">';
         h += '<td>'+fmtFR(o.operation_date)+'</td><td>'+esc(o.libelle)+'</td><td>'+esc(CAISSE_LABELS[o.caisse]||o.caisse)+'</td>';
         h += '<td><span class="badge '+(isIn?'badge-in':'badge-out')+'">'+(isIn?'Entrée':'Sortie')+'</span></td>';
         h += '<td>'+Number(o.amount).toFixed(3)+'</td>';
@@ -687,6 +700,7 @@ function loadOps() {
       var ph = '';
       for (var i=1;i<=pages;i++) ph += '<a href="#" class="'+(i===currentPage?'active':'')+'" onclick="switchPage('+i+');return false">'+i+'</a>';
       document.getElementById('pagination').innerHTML = ph;
+      scrollToEditedOp();
     });
   });
 }
@@ -701,7 +715,7 @@ function loadOpsFor(s, page, perPage, bodyId, pagId, tab) {
       if (!ops.length) h = '<tr><td colspan="6" style="color:#888;text-align:center">Aucune opération</td></tr>';
       else ops.forEach(function(o) {
         var isIn = o.type === 'in';
-        h += '<tr class="'+(isIn?'in':'out')+'">';
+        h += '<tr id="opRow_'+o.id+'" class="'+(isIn?'in':'out')+'">';
         h += '<td>'+fmtFR(o.operation_date)+'</td><td>'+esc(o.libelle)+'</td>';
         h += '<td><span class="badge '+(isIn?'badge-in':'badge-out')+'">'+(isIn?'Entrée':'Sortie')+'</span></td>';
         h += '<td>'+Number(o.amount).toFixed(3)+'</td><td>'+esc(o.payment_method)+'</td>';
@@ -712,13 +726,16 @@ function loadOpsFor(s, page, perPage, bodyId, pagId, tab) {
       var ph = '';
       for (var i=1;i<=pages;i++) ph += '<a href="#" class="'+(i===page?'active':'')+'" onclick="window._tmpPage='+i+';renderCaisseView(\''+tab+'\',\''+s+'\','+i+','+perPage+');return false">'+i+'</a>';
       document.getElementById(pagId).innerHTML = ph;
+      scrollToEditedOp();
     });
   });
 }
 
 function editOp(id) {
-  // Store current tab to return after save
+  // Store current tab + page to return after save
   window._previousTab = currentTab;
+  window._previousPage = currentPage;
+  window._editedOpId = id;
   apiP('/api/caisse/operations?per_page=200').then(function(r) { return r.json(); }).then(function(ops) {
     var op = ops.find(function(o) { return o.id == id; });
     if (!op) return;
@@ -759,6 +776,18 @@ function checkMediaBuyThreshold() {
     var bal = sum.caisses && sum.caisses.media_buy && sum.caisses.media_buy.balance || 0;
     el.style.display = bal >= 380 ? 'flex' : 'none';
   }).catch(function() {});
+}
+
+function scrollToEditedOp() {
+  var id = window._editedOpId;
+  if (!id) return;
+  window._editedOpId = null;
+  var row = document.getElementById('opRow_'+id);
+  if (row) {
+    row.classList.add('highlight-row');
+    setTimeout(function() { row.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 100);
+    setTimeout(function() { row.classList.remove('highlight-row'); }, 5000);
+  }
 }
 
 function switchTab(caisse) {
