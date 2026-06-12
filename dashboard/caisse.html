@@ -390,7 +390,7 @@ function updatePaiementBreakdown(amount, colis) {
       var nbAssocies = parseInt(associesQ.valeur2) || 0;
       var taux = parseFloat(associesQ.valeur) || 1;
       associesVal = nbColis * nbAssocies * taux;
-      html += '<div class="paiement-row"><span>Associés (' + nbColis + ' colis × ' + nbAssocies + ' assoc. × ' + taux.toFixed(3) + ' DT)</span><span style="color:#e74a3b">-' + associesVal.toFixed(3) + '</span></div>';
+      html += '<div class="paiement-row"><span>Associés (' + nbColis + ' colis × ' + nbAssocies + ' assoc. × ' + taux.toFixed(3) + ' DT)</span><span style="color:#1cc88a">+' + associesVal.toFixed(3) + ' IN</span></div>';
     }
     var reste = amount - associesVal;
     if (reste < 0) reste = 0;
@@ -405,7 +405,7 @@ function updatePaiementBreakdown(amount, colis) {
       if (pct <= 0) return;
       totalPct += pct;
       var amt = reste * pct / 100;
-      html += '<div class="paiement-row"><span>' + (CAISSE_LABELS[c]||c) + ' (' + pct + '%)</span><span style="color:#e74a3b">-' + amt.toFixed(3) + '</span></div>';
+      html += '<div class="paiement-row"><span>' + (CAISSE_LABELS[c]||c) + ' (' + pct + '%)</span><span style="color:#1cc88a">+' + amt.toFixed(3) + ' IN</span></div>';
     });
 
     var net = amount - associesVal;
@@ -442,6 +442,25 @@ function validerPaiement() {
     var associesQ = qm['associes'];
     var livreurs = parseInt(associesQ && associesQ.valeur2) || 0;
 
+    // Calculer la répartition pour le message de succès
+    var associesVal = 0;
+    if (associesQ && associesQ.type === 'formule' && associesQ.valeur2) {
+      associesVal = colis * (parseInt(associesQ.valeur2) || 0) * (parseFloat(associesQ.valeur) || 1);
+    }
+    var reste = Math.max(0, amt - associesVal);
+    var pctLines = [];
+    QUOTA_CAISSES.forEach(function(c) {
+      if (c === 'associes') return;
+      var q = qm[c];
+      if (!q || q.type !== 'pourcentage') return;
+      var pct = parseFloat(q.valeur) || 0;
+      if (pct <= 0) return;
+      var a = reste * pct / 100;
+      pctLines.push({ label: CAISSE_LABELS[c] || c, amount: a });
+    });
+    var recetteNet = amt - associesVal;
+    pctLines.forEach(function(p) { recetteNet -= p.amount; });
+
     var body = {
       operation_date: dateStr,
       libelle: document.getElementById('paiementLibelle').value.trim() || 'Encaissement paiement',
@@ -455,8 +474,18 @@ function validerPaiement() {
 
     return apiP('/api/caisse/operations', { method: 'POST', body: JSON.stringify(body) }).then(function(r) {
       if (!r.ok) return r.json().then(function(e) { throw new Error(e.error || 'Erreur'); });
+      // Message détaillé
+      var detailHtml = '<div style="font-size:14px;font-weight:700;margin-bottom:6px">✓ Paiement enregistré avec succès</div>';
+      detailHtml += '<div style="font-size:12px;line-height:1.6">';
+      detailHtml += '<div>Montant : <strong>' + amt.toFixed(3) + ' TND</strong></div>';
+      detailHtml += '<div>Recettes → <span style="color:#1cc88a;font-weight:600">+' + associesVal.toFixed(3) + ' IN</span> Associés</div>';
+      pctLines.forEach(function(p) {
+        detailHtml += '<div>Recettes → <span style="color:#1cc88a;font-weight:600">+' + p.amount.toFixed(3) + ' IN</span> ' + p.label + '</div>';
+      });
+      detailHtml += '<div style="margin-top:4px;border-top:1px solid #d4edda;padding-top:4px">Recette nette (solde recettes) : <strong>' + recetteNet.toFixed(3) + ' TND</strong></div>';
+      detailHtml += '</div>';
       msg.className = 'paiement-msg success';
-      msg.textContent = '✓ Paiement enregistré avec succès';
+      msg.innerHTML = detailHtml;
       document.getElementById('paiementMontant').value = '';
       document.getElementById('paiementLibelle').value = '';
       document.getElementById('paiementColis').value = '';
@@ -466,7 +495,7 @@ function validerPaiement() {
     });
   }).catch(function(e) {
     msg.className = 'paiement-msg error';
-    msg.textContent = '✗ Erreur : ' + (e.message || 'Échec de l\'enregistrement');
+    msg.innerHTML = '✗ Erreur : ' + (e.message || 'Échec de l\'enregistrement');
   }).finally(function() {
     btn.textContent = 'Valider';
   });

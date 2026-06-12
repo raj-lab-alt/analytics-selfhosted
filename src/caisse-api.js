@@ -55,17 +55,29 @@ async function createQuotaOps(recetteId, recetteAmount, recetteLibelle, colis, l
   const ops = [];
   let reste = recetteAmount;
 
-  // Associés (formule fixe)
+  // Associés (formule fixe) — paire OUT recettes + IN caisse
   const aQuota = quotas['associes'];
   const aVal = aQuota ? parseFloat(aQuota.valeur) : 0;
   let associesAmount = 0;
   if (aQuota && aQuota.type === 'formule' && aVal > 0 && colis && livreurs) {
     associesAmount = colis * livreurs * aVal;
     if (associesAmount > 0) {
+      const label = CAISSE_LABELS['associes'];
+      const lib = 'Quota paiement: ' + label;
       ops.push({
         operation_date: new Date().toISOString().slice(0, 10),
-        libelle: 'Quote-part livreurs: ' + recetteLibelle,
+        libelle: lib,
         type: 'out',
+        amount: associesAmount,
+        currency: 'TND',
+        caisse: 'recettes',
+        parent_id: recetteId,
+        note: 'Auto (colis=' + colis + ', livreurs=' + livreurs + ', taux=' + aVal + ')',
+      });
+      ops.push({
+        operation_date: new Date().toISOString().slice(0, 10),
+        libelle: lib,
+        type: 'in',
         amount: associesAmount,
         currency: 'TND',
         caisse: 'associes',
@@ -76,7 +88,7 @@ async function createQuotaOps(recetteId, recetteAmount, recetteLibelle, colis, l
     }
   }
 
-  // Pourcentages sur le reste
+  // Pourcentages sur le reste — paires OUT recettes + IN caisse
   if (reste > 0) {
     for (const c of QUOTA_CAISSES) {
       if (c === 'associes') continue;
@@ -86,11 +98,24 @@ async function createQuotaOps(recetteId, recetteAmount, recetteLibelle, colis, l
       if (pct <= 0) continue;
       const amt = reste * pct / 100;
       if (amt > 0) {
+        const rAmt = Math.round(amt * 1000) / 1000;
+        const label = CAISSE_LABELS[c];
+        const lib = 'Quota paiement: ' + label;
         ops.push({
           operation_date: new Date().toISOString().slice(0, 10),
-          libelle: 'Quote-part ' + CAISSE_LABELS[c] + ': ' + recetteLibelle,
+          libelle: lib,
           type: 'out',
-          amount: Math.round(amt * 1000) / 1000,
+          amount: rAmt,
+          currency: 'TND',
+          caisse: 'recettes',
+          parent_id: recetteId,
+          note: 'Auto (' + pct + '% de ' + reste + ')',
+        });
+        ops.push({
+          operation_date: new Date().toISOString().slice(0, 10),
+          libelle: lib,
+          type: 'in',
+          amount: rAmt,
           currency: 'TND',
           caisse: c,
           parent_id: recetteId,
