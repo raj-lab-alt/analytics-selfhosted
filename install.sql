@@ -156,6 +156,19 @@ CREATE TABLE IF NOT EXISTS stats_hourly (
   UNIQUE (site_id, heure)
 );
 
+CREATE TABLE IF NOT EXISTS caisse_operations (
+  id BIGSERIAL PRIMARY KEY,
+  operation_date DATE NOT NULL,
+  type VARCHAR(10) NOT NULL CHECK (type IN ('in','out')),
+  amount DECIMAL(12,3) NOT NULL,
+  currency CHAR(3) NOT NULL DEFAULT 'TND',
+  payment_method VARCHAR(30) DEFAULT '',
+  reference VARCHAR(100) DEFAULT '',
+  note TEXT DEFAULT '',
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_caisse_date ON caisse_operations (operation_date);
+
 CREATE TABLE IF NOT EXISTS stats_daily (
   id SERIAL PRIMARY KEY,
   site_id INT NOT NULL,

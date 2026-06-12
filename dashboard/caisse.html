@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Caisse - Analytics</title>
+<link rel="stylesheet" href="/assets/dashboard.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+.caisse-grid { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap }
+.caisse-grid .stat-card { flex:1; min-width:140px }
+.caisse-form { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px }
+.caisse-form p { margin:0 }
+.caisse-form label { display:block; font-size:12px; color:#666; margin-bottom:2px }
+.caisse-form input, .caisse-form select, .caisse-form textarea { width:100%; box-sizing:border-box }
+.caisse-filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px }
+.caisse-filters .btn-group { display:flex; gap:4px }
+.caisse-export-btns { display:flex; gap:8px; margin-bottom:12px }
+.caisse-insights { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px }
+.caisse-insights .card { overflow:auto; max-height:320px }
+.caisse-insights table { width:100% }
+.chart-container { margin-bottom:16px }
+.caisse-table-wrap { overflow-x:auto }
+.caisse-table { width:100% }
+.caisse-table .in { border-left:4px solid #1cc88a }
+.caisse-table .out { border-left:4px solid #e74a3b }
+.badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600 }
+.badge-in { background:#d4edda; color:#155724 }
+.badge-out { background:#f8d7da; color:#721c24 }
+.actions a { margin-right:4px; font-size:12px }
+.pagination { margin-top:12px; display:flex; gap:4px; justify-content:center }
+.pagination a { padding:4px 10px; border:1px solid #ddd; border-radius:4px; text-decoration:none; color:#333 }
+.pagination a.active { background:#4e73df; color:#fff; border-color:#4e73df }
+@media(max-width:600px){ .caisse-form { grid-template-columns:1fr } .caisse-insights { grid-template-columns:1fr } }
+</style>
+</head>
+<body>
+<nav class="nav">
+  <a href="/">Overview</a>
+  <a href="/realtime.html">Realtime</a>
+  <a href="/heatmap.html">Heatmap</a>
+  <a href="/map.html">Map</a>
+  <a href="/sites.html">Sites</a>
+  <a href="/caisse.html" class="active">Caisse</a>
+  <a href="/login.html" class="logout">Logout</a>
+</nav>
+<main class="container">
+  <h1>Gestion de caisse</h1>
+
+  <!-- Summary cards -->
+  <div class="caisse-grid">
+    <div class="stat-card"><h3>Entrées</h3><p id="sumIn" style="color:#1cc88a;font-size:24px;font-weight:700">0.000</p></div>
+    <div class="stat-card"><h3>Sorties</h3><p id="sumOut" style="color:#e74a3b;font-size:24px;font-weight:700">0.000</p></div>
+    <div class="stat-card highlight"><h3>Solde</h3><p id="sumBalance" style="font-size:24px;font-weight:700">0.000</p></div>
+  </div>
+
+  <!-- Form -->
+  <div class="card" style="margin-bottom:16px" id="formCard">
+    <h2 id="formTitle">Nouvelle opération</h2>
+    <form id="opForm" class="caisse-form">
+      <input type="hidden" name="edit_id" id="editId" value="">
+      <p><label>Type</label><select name="type" id="fType" required><option value="in">Entrée</option><option value="out">Sortie</option></select></p>
+      <p><label>Montant</label><input type="number" name="amount" id="fAmount" step="0.001" min="0" required></p>
+      <p><label>Devise</label><input type="text" name="currency" id="fCurrency" value="TND" maxlength="3" required></p>
+      <p><label>Date (jj/mm/aaaa)</label><input type="text" name="operation_date" id="fDate" placeholder="jj/mm/aaaa" required></p>
+      <p><label>Mode de paiement</label><input type="text" name="payment_method" id="fPayment" maxlength="30"></p>
+      <p><label>Référence</label><input type="text" name="reference" id="fRef" maxlength="100"></p>
+      <p style="grid-column:1/-1"><label>Note</label><textarea name="note" id="fNote" rows="2"></textarea></p>
+      <p style="grid-column:1/-1">
+        <button type="submit" class="btn btn-primary" id="formSubmit">Enregistrer</button>
+        <button type="button" class="btn" id="formCancel" style="display:none" onclick="cancelEdit()">Annuler</button>
+      </p>
+    </form>
+  </div>
+
+  <!-- Filters + Exports -->
+  <div class="caisse-filters">
+    <span style="font-weight:600">Filtrer:</span>
+    <div class="btn-group">
+      <button class="btn btn-sm" onclick="setType('')" id="ftAll">Toutes</button>
+      <button class="btn btn-sm" onclick="setType('in')" id="ftIn">Entrées</button>
+      <button class="btn btn-sm" onclick="setType('out')" id="ftOut">Sorties</button>
+    </div>
+    <input type="text" id="fDateFrom" class="input" placeholder="Du jj/mm/aaaa" style="width:120px">
+    <input type="text" id="fDateTo" class="input" placeholder="Au jj/mm/aaaa" style="width:120px">
+    <button class="btn btn-sm" onclick="applyFilters()">Appliquer</button>
+  </div>
+  <div class="caisse-export-btns">
+    <button class="btn btn-sm" onclick="downloadExport('csv')">Exporter CSV</button>
+    <button class="btn btn-sm" onclick="downloadExport('pdf')">Exporter PDF</button>
+  </div>
+
+  <!-- Chart -->
+  <div class="card chart-container">
+    <h2>Courbe du solde</h2>
+    <canvas id="balanceChart" height="200"></canvas>
+  </div>
+
+  <!-- Daily + Monthly insights -->
+  <div class="caisse-insights">
+    <div class="card"><h2>Journalier</h2><div id="dailyTable"></div></div>
+    <div class="card"><h2>Mensuel</h2><div id="monthlyTable"></div></div>
+  </div>
+
+  <!-- Operations table -->
+  <div class="card">
+    <h2>Opérations</h2>
+    <div class="caisse-table-wrap">
+      <table class="caisse-table">
+        <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Devise</th><th>Mode</th><th>Réf</th><th>Note</th><th>Actions</th></tr></thead>
+        <tbody id="opsBody"></tbody>
+      </table>
+    </div>
+    <div id="pagination" class="pagination"></div>
+  </div>
+</main>
+
+<script>
+let currentPage = 1, currentType = '', currentDateFrom = '', currentDateTo = '', chart;
+
+function getToken() { return localStorage.getItem('token'); }
+function apiP(path, opts) {
+  return fetch(path, { headers: { 'Authorization': 'Bearer ' + getToken(), 'Content-Type': 'application/json', ...opts?.headers }, ...opts });
+}
+
+function fmtFR(d) {
+  if (!d) return '';
+  var m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3]+'/'+m[2]+'/'+m[1] : d;
+}
+function toISO(d) {
+  var m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  return m ? m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0') : d;
+}
+function todayFR() {
+  var d = new Date();
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+function qs() {
+  var p = new URLSearchParams();
+  if (currentType) p.set('type', currentType);
+  if (currentDateFrom) p.set('date_from', toISO(currentDateFrom));
+  if (currentDateTo) p.set('date_to', toISO(currentDateTo));
+  return p.toString();
+}
+function setType(t) {
+  currentType = t;
+  document.querySelectorAll('.btn-group .btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('ft'+(t||'All')).classList.add('active');
+  loadPage(1);
+}
+function applyFilters() {
+  currentDateFrom = document.getElementById('fDateFrom').value;
+  currentDateTo = document.getElementById('fDateTo').value;
+  loadPage(1);
+}
+
+function cancelEdit() {
+  document.getElementById('editId').value = '';
+  document.getElementById('formTitle').textContent = 'Nouvelle opération';
+  document.getElementById('formSubmit').textContent = 'Enregistrer';
+  document.getElementById('formCancel').style.display = 'none';
+  document.getElementById('opForm').reset();
+  document.getElementById('fDate').value = todayFR();
+}
+
+function editOp(id) {
+  apiP('/api/caisse/operations?per_page=200').then(function(r) { return r.json(); }).then(function(ops) {
+    var op = ops.find(function(o) { return o.id == id; });
+    if (!op) return;
+    document.getElementById('editId').value = op.id;
+    document.getElementById('formTitle').textContent = 'Modifier opération #' + op.id;
+    document.getElementById('formSubmit').textContent = 'Enregistrer';
+    document.getElementById('formCancel').style.display = 'inline-block';
+    document.getElementById('fType').value = op.type;
+    document.getElementById('fAmount').value = op.amount;
+    document.getElementById('fCurrency').value = op.currency;
+    document.getElementById('fDate').value = fmtFR(op.operation_date);
+    document.getElementById('fPayment').value = op.payment_method || '';
+    document.getElementById('fRef').value = op.reference || '';
+    document.getElementById('fNote').value = op.note || '';
+  });
+}
+
+function deleteOp(id) {
+  if (!confirm('Supprimer cette opération ?')) return;
+  apiP('/api/caisse/operations/' + id, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() {
+    loadPage(currentPage);
+  });
+}
+
+document.getElementById('opForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  var editId = document.getElementById('editId').value;
+  var body = {
+    type: document.getElementById('fType').value,
+    amount: document.getElementById('fAmount').value,
+    currency: document.getElementById('fCurrency').value,
+    operation_date: document.getElementById('fDate').value,
+    payment_method: document.getElementById('fPayment').value,
+    reference: document.getElementById('fRef').value,
+    note: document.getElementById('fNote').value,
+  };
+  var url = editId ? '/api/caisse/operations/' + editId : '/api/caisse/operations';
+  var method = editId ? 'PUT' : 'POST';
+  apiP(url, { method: method, body: JSON.stringify(body) }).then(function(r) {
+    if (!r.ok) { r.json().then(function(e) { alert(e.error || 'Erreur'); }); return; }
+    cancelEdit();
+    loadPage(1);
+  });
+});
+
+function loadPage(page) {
+  currentPage = page;
+  var perPage = 20;
+  var s = qs();
+  Promise.all([
+    apiP('/api/caisse/operations?' + s + '&page=' + page + '&per_page=' + perPage).then(function(r) { return r.json(); }),
+    apiP('/api/caisse/operations/count?' + s).then(function(r) { return r.json(); }),
+    apiP('/api/caisse/summary?' + s).then(function(r) { return r.json(); }),
+    apiP('/api/caisse/daily?' + s).then(function(r) { return r.json(); }),
+    apiP('/api/caisse/monthly?' + s).then(function(r) { return r.json(); }),
+    apiP('/api/caisse/chart?days=30').then(function(r) { return r.json(); }),
+  ]).then(function(res) {
+    var ops = res[0], countData = res[1], summary = res[2], daily = res[3], monthly = res[4], chartData = res[5];
+    var total = countData.count || 0;
+    var pages = Math.max(1, Math.ceil(total / perPage));
+
+    // Summary cards
+    document.getElementById('sumIn').textContent = (summary.in || 0).toFixed(3);
+    document.getElementById('sumOut').textContent = (summary.out || 0).toFixed(3);
+    document.getElementById('sumBalance').textContent = (summary.balance || 0).toFixed(3);
+
+    // Table
+    var html = '';
+    if (!ops.length) {
+      html = '<tr><td colspan="8" style="color:#888;text-align:center">Aucune opération</td></tr>';
+    } else {
+      ops.forEach(function(o) {
+        var isIn = o.type === 'in';
+        var typeLabel = isIn ? 'Entrée' : 'Sortie';
+        html += '<tr class="' + (isIn?'in':'out') + '">';
+        html += '<td>' + fmtFR(o.operation_date) + '</td>';
+        html += '<td><span class="badge ' + (isIn?'badge-in':'badge-out') + '">' + typeLabel + '</span></td>';
+        html += '<td>' + Number(o.amount).toFixed(3) + '</td>';
+        html += '<td>' + (o.currency||'') + '</td>';
+        html += '<td>' + esc(o.payment_method) + '</td>';
+        html += '<td>' + esc(o.reference) + '</td>';
+        html += '<td>' + esc(o.note) + '</td>';
+        html += '<td class="actions"><a href="#" onclick="editOp('+o.id+')">✏️</a> <a href="#" onclick="deleteOp('+o.id+')">🗑️</a></td>';
+        html += '</tr>';
+      });
+    }
+    document.getElementById('opsBody').innerHTML = html;
+
+    // Pagination
+    var phtml = '';
+    for (var i = 1; i <= pages; i++) {
+      phtml += '<a href="#" class="' + (i === page ? 'active' : '') + '" onclick="loadPage('+i+');return false">' + i + '</a>';
+    }
+    document.getElementById('pagination').innerHTML = phtml;
+
+    // Daily table
+    var dhtml = '<table><thead><tr><th>Date</th><th>Entrées</th><th>Sorties</th><th>Net</th></tr></thead><tbody>';
+    if (!daily.length) dhtml += '<tr><td colspan="4" style="color:#888">Aucune donnée</td></tr>';
+    else daily.forEach(function(r) {
+      dhtml += '<tr><td>' + fmtFR(r.day) + '</td><td>' + r.in_total.toFixed(3) + '</td><td>' + r.out_total.toFixed(3) + '</td><td>' + (r.in_total - r.out_total).toFixed(3) + '</td></tr>';
+    });
+    dhtml += '</tbody></table>';
+    document.getElementById('dailyTable').innerHTML = dhtml;
+
+    // Monthly table
+    var mhtml = '<table><thead><tr><th>Mois</th><th>Entrées</th><th>Sorties</th><th>Net</th></tr></thead><tbody>';
+    if (!monthly.length) mhtml += '<tr><td colspan="4" style="color:#888">Aucune donnée</td></tr>';
+    else monthly.forEach(function(r) {
+      var label = r.month + '-01';
+      var d = new Date(label + 'T00:00:00');
+      var monthName = d.toLocaleString('fr', { month:'short', year:'numeric' });
+      mhtml += '<tr><td>' + monthName + '</td><td>' + r.in_total.toFixed(3) + '</td><td>' + r.out_total.toFixed(3) + '</td><td>' + (r.in_total - r.out_total).toFixed(3) + '</td></tr>';
+    });
+    mhtml += '</tbody></table>';
+    document.getElementById('monthlyTable').innerHTML = mhtml;
+
+    // Chart
+    if (chart) chart.destroy();
+    var ctx = document.getElementById('balanceChart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: chartData.map(function(p) { var d = p.date; return d ? d.slice(8,10)+'/'+d.slice(5,7) : ''; }),
+        datasets: [{
+          label: 'Solde',
+          data: chartData.map(function(p) { return p.balance; }),
+          borderColor: '#0f7b73',
+          backgroundColor: 'rgba(15,123,115,0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2,
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: false } },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+  });
+}
+
+function esc(s) {
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function downloadExport(format) {
+  var s = qs();
+  var url = '/api/caisse/export/' + format + '?' + s;
+  fetch(url, { headers: { 'Authorization': 'Bearer ' + getToken() } }).then(function(r) {
+    if (!r.ok) throw new Error('Export failed');
+    return r.blob();
+  }).then(function(blob) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'caisse-export-' + new Date().toISOString().slice(0,10) + '.' + format;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }).catch(function(e) { alert('Erreur export: ' + e.message); });
+}
+
+// Init
+cancelEdit();
+loadPage(1);
+</script>
+</body>
+</html>

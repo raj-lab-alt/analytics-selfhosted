@@ -87,6 +87,7 @@ const { collect, processEvent } = require('./src/collect');
 const { setupWebSocket, getActiveSessions } = require('./src/realtime');
 const { aggregateHourly, aggregateDaily, cleanup, cleanupStaleSessions } = require('./src/aggregate');
 const dashboardApi = require('./src/dashboard-api');
+const caisseApi = require('./src/caisse-api');
 
 app.post('/collect', collect);
 app.get('/collect', async (req, res) => {
@@ -128,6 +129,7 @@ app.get('/api/platforms', dashboardApi.getPlatforms);
 app.get('/api/sites', dashboardApi.getSites);
 app.post('/api/sites', dashboardApi.createSite);
 app.get('/api/realtime/detail', dashboardApi.getRealtimeDetail);
+app.use('/api/caisse', caisseApi);
 
 // Heatmap enrichment endpoints
 app.get('/api/heatmaps/pages', dashboardApi.getHeatmapPages);

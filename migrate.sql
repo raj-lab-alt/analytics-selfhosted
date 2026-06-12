@@ -100,3 +100,16 @@ ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS utm_source VARCHAR(100) DEF
 ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS utm_medium VARCHAR(100) DEFAULT '';
 ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(200) DEFAULT '';
 ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS device_type VARCHAR(10) DEFAULT '';
+
+CREATE TABLE IF NOT EXISTS caisse_operations (
+  id BIGSERIAL PRIMARY KEY,
+  operation_date DATE NOT NULL,
+  type VARCHAR(10) NOT NULL CHECK (type IN ('in','out')),
+  amount DECIMAL(12,3) NOT NULL,
+  currency CHAR(3) NOT NULL DEFAULT 'TND',
+  payment_method VARCHAR(30) DEFAULT '',
+  reference VARCHAR(100) DEFAULT '',
+  note TEXT DEFAULT '',
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_caisse_date ON caisse_operations (operation_date);
