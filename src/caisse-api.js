@@ -528,4 +528,256 @@ router.get('/export/pdf', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ===== BÉNÉFICES & AVANCES =====
+
+// --- GET /api/caisse/associes ---
+router.get('/associes', async (req, res) => {
+  try {
+    const { data, error } = await db.getClient().from('caisse_associes').select('*').order('nom');
+    if (error) throw error;
+    res.json(data || []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- POST /api/caisse/associes ---
+router.post('/associes', async (req, res) => {
+  try {
+    const { nom, pct, actif } = req.body;
+    if (!nom || !nom.trim()) return res.status(400).json({ error: 'Nom requis' });
+    const { data, error } = await db.getClient().from('caisse_associes').insert({ nom: nom.trim(), pct: parseFloat(pct) || 0, actif: actif !== false }).select();
+    if (error) throw error;
+    res.json(data[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- PUT /api/caisse/associes/:id ---
+router.put('/associes/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID invalide' });
+    const upd = {};
+    if (req.body.nom !== undefined) upd.nom = req.body.nom.trim();
+    if (req.body.pct !== undefined) upd.pct = parseFloat(req.body.pct);
+    if (req.body.actif !== undefined) upd.actif = req.body.actif;
+    const { data, error } = await db.getClient().from('caisse_associes').update(upd).eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) return res.status(404).json({ error: 'Introuvable' });
+    res.json(data[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- DELETE /api/caisse/associes/:id ---
+router.delete('/associes/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID invalide' });
+    const { error } = await db.getClient().from('caisse_associes').delete().eq('id', id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- GET /api/caisse/avances ---
+router.get('/avances', async (req, res) => {
+  try {
+    let q = db.getClient().from('caisse_avances').select('*, caisse_associes!inner(nom, pct)');
+    if (req.query.associe_id) q = q.eq('associe_id', parseInt(req.query.associe_id));
+    if (req.query.rembourse !== undefined) q = q.eq('rembourse', req.query.rembourse === 'true');
+    const { data, error } = await q.order('date_avance', { ascending: false }).order('id', { ascending: false });
+    if (error) {
+      // Fallback without join
+      const { data: d2, error: e2 } = await db.getClient().from('caisse_avances').select('*').order('date_avance', { ascending: false }).order('id', { ascending: false });
+      if (e2) throw e2;
+      return res.json(d2 || []);
+    }
+    res.json(data || []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- POST /api/caisse/avances ---
+router.post('/avances', async (req, res) => {
+  try {
+    const b = req.body;
+    if (!b.associe_id) return res.status(400).json({ error: 'Associé requis' });
+    if (!['associes', 'achats'].includes(b.source_caisse)) return res.status(400).json({ error: 'Source invalide' });
+    const amt = parseFloat(b.montant);
+    if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: 'Montant invalide' });
+    const opDate = parseDate(b.date_avance);
+
+    // 1) Create OUT operation on source caisse
+    const { data: opData, error: opErr } = await db.getClient().from('caisse_operations').insert({
+      operation_date: opDate,
+      libelle: 'Avance bénéfice: ' + (b.libelle || ''),
+      type: 'out',
+      amount: amt,
+      currency: 'TND',
+      caisse: b.source_caisse,
+      note: 'Avance associé id=' + b.associe_id,
+    }).select();
+    if (opErr) throw opErr;
+
+    // 2) Register advance
+    const { data, error } = await db.getClient().from('caisse_avances').insert({
+      associe_id: parseInt(b.associe_id),
+      montant: amt,
+      source_caisse: b.source_caisse,
+      date_avance: opDate,
+      note: b.note || '',
+      operation_id: opData[0].id,
+    }).select();
+    if (error) throw error;
+    res.json(data[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- PUT /api/caisse/avances/:id/rembourser ---
+router.put('/avances/:id/rembourser', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID invalide' });
+    const { data, error } = await db.getClient().from('caisse_avances').update({ rembourse: true, date_remboursement: new Date().toISOString().slice(0, 10) }).eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) return res.status(404).json({ error: 'Introuvable' });
+    res.json(data[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- GET /api/caisse/benefices/current?mois=YYYY-MM ---
+router.get('/benefices/current', async (req, res) => {
+  try {
+    const mois = req.query.mois || new Date().toISOString().slice(0, 7);
+    const debut = mois + '-01';
+    const fin = new Date(new Date(debut).getTime() + 32 * 86400000).toISOString().slice(0, 10);
+
+    // Fetch all operations for the month
+    const { data: ops, error } = await db.getClient()
+      .from('caisse_operations')
+      .select('caisse, type, amount, note')
+      .gte('operation_date', debut)
+      .lt('operation_date', fin);
+    if (error) throw error;
+
+    // Calculate solde for achats and associes (excluding advances)
+    let soldeAchats = 0, soldeAssocies = 0;
+    (ops || []).forEach(r => {
+      const amt = parseFloat(r.amount) || 0;
+      if (r.caisse === 'achats') {
+        // Ignore advances recorded in this caisse for the benefit calc
+        if (r.note && r.note.startsWith('Avance associé')) return;
+        soldeAchats += r.type === 'in' ? amt : -amt;
+      }
+      if (r.caisse === 'associes') {
+        if (r.note && r.note.startsWith('Avance associé')) return;
+        soldeAssocies += r.type === 'in' ? amt : -amt;
+      }
+    });
+
+    const beneficeBrut = soldeAchats + soldeAssocies;
+
+    // Fetch associates
+    const { data: associes, error: ae } = await db.getClient().from('caisse_associes').select('*').eq('actif', true).order('nom');
+    if (ae) throw ae;
+
+    // Fetch advances for this month grouped by associate
+    const { data: avances, error: ave } = await db.getClient()
+      .from('caisse_avances')
+      .select('associe_id, montant')
+      .eq('rembourse', false)
+      .gte('date_avance', debut)
+      .lt('date_avance', fin);
+    if (ave) throw ave;
+
+    const avancesByAssoc = {};
+    (avances || []).forEach(a => {
+      const id = a.associe_id;
+      if (!avancesByAssoc[id]) avancesByAssoc[id] = 0;
+      avancesByAssoc[id] += parseFloat(a.montant);
+    });
+
+    const details = (associes || []).map(a => {
+      const pct = parseFloat(a.pct) || 0;
+      const partBrute = beneficeBrut * pct / 100;
+      const totAv = avancesByAssoc[a.id] || 0;
+      return {
+        associe_id: a.id,
+        associe_nom: a.nom,
+        pct: pct,
+        part_brute: Math.round(partBrute * 1000) / 1000,
+        total_avances: Math.round(totAv * 1000) / 1000,
+        solde_a_payer: Math.round((partBrute - totAv) * 1000) / 1000,
+      };
+    });
+
+    res.json({
+      mois,
+      solde_achats: Math.round(soldeAchats * 1000) / 1000,
+      solde_associes: Math.round(soldeAssocies * 1000) / 1000,
+      benefice_brut: Math.round(beneficeBrut * 1000) / 1000,
+      details,
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- POST /api/caisse/benefices/calculer ---
+router.post('/benefices/calculer', async (req, res) => {
+  try {
+    const mois = req.body.mois || new Date().toISOString().slice(0, 7);
+    // Fetch current preview
+    const previewResp = await (async () => {
+      const debut = mois + '-01';
+      const fin = new Date(new Date(debut).getTime() + 32 * 86400000).toISOString().slice(0, 10);
+      const { data: ops } = await db.getClient().from('caisse_operations').select('caisse, type, amount, note').gte('operation_date', debut).lt('operation_date', fin);
+      let sa = 0, so = 0;
+      (ops || []).forEach(r => {
+        const amt = parseFloat(r.amount) || 0;
+        if (r.caisse === 'achats' && (!r.note || !r.note.startsWith('Avance associé'))) sa += r.type === 'in' ? amt : -amt;
+        if (r.caisse === 'associes' && (!r.note || !r.note.startsWith('Avance associé'))) so += r.type === 'in' ? amt : -amt;
+      });
+      const bb = sa + so;
+      const { data: associes } = await db.getClient().from('caisse_associes').select('*').eq('actif', true);
+      const { data: avances } = await db.getClient().from('caisse_avances').select('associe_id, montant').eq('rembourse', false).gte('date_avance', debut).lt('date_avance', fin);
+      const byAssoc = {};
+      (avances || []).forEach(a => { const id = a.associe_id; if (!byAssoc[id]) byAssoc[id] = 0; byAssoc[id] += parseFloat(a.montant); });
+      const dets = (associes || []).map(a => ({
+        associe_id: a.id, part_brute: Math.round(bb * parseFloat(a.pct) / 100 * 1000) / 1000,
+        total_avances: Math.round((byAssoc[a.id] || 0) * 1000) / 1000,
+        solde_a_payer: Math.round((bb * parseFloat(a.pct) / 100 - (byAssoc[a.id] || 0)) * 1000) / 1000,
+      }));
+      return { benefice_brut: Math.round(bb * 1000) / 1000, details: dets };
+    })();
+
+    // Insert benefit record
+    const { data: ben, error: be } = await db.getClient().from('caisse_benefices').insert({ mois: mois + '-01', benefice_brut: previewResp.benefice_brut }).select();
+    if (be) throw be;
+
+    // Insert details
+    for (const d of previewResp.details) {
+      const { error: de } = await db.getClient().from('caisse_benefices_detail').insert({
+        benefice_id: ben[0].id,
+        associe_id: d.associe_id,
+        part_brute: d.part_brute,
+        total_avances: d.total_avances,
+        solde_a_payer: d.solde_a_payer,
+      });
+      if (de) console.error('Detail insert error:', de.message);
+    }
+
+    res.json({ benefice: { ...ben[0], details: previewResp.details } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- GET /api/caisse/benefices ---
+router.get('/benefices', async (req, res) => {
+  try {
+    const { data, error } = await db.getClient().from('caisse_benefices').select('*').order('mois', { ascending: false });
+    if (error) throw error;
+    // Attach details for each
+    for (const b of (data || [])) {
+      const { data: dd } = await db.getClient().from('caisse_benefices_detail').select('*, caisse_associes!inner(nom, pct)').eq('benefice_id', b.id);
+      b.details = dd || [];
+    }
+    res.json(data || []);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

@@ -205,3 +205,41 @@ CREATE TABLE IF NOT EXISTS stats_daily (
   top_sources JSONB,
   UNIQUE (site_id, jour)
 );
+
+-- Caisse: associés
+CREATE TABLE IF NOT EXISTS caisse_associes (
+  id BIGSERIAL PRIMARY KEY,
+  nom VARCHAR(100) NOT NULL,
+  pct DECIMAL(5,2) NOT NULL DEFAULT 0,
+  actif BOOLEAN DEFAULT TRUE
+);
+
+-- Caisse: avances sur bénéfices
+CREATE TABLE IF NOT EXISTS caisse_avances (
+  id BIGSERIAL PRIMARY KEY,
+  associe_id BIGINT REFERENCES caisse_associes(id),
+  montant DECIMAL(12,3) NOT NULL,
+  source_caisse VARCHAR(20) NOT NULL CHECK (source_caisse IN ('associes','achats')),
+  date_avance DATE NOT NULL,
+  rembourse BOOLEAN DEFAULT FALSE,
+  date_remboursement DATE,
+  note TEXT,
+  operation_id BIGINT REFERENCES caisse_operations(id)
+);
+
+-- Caisse: bénéfices mensuels
+CREATE TABLE IF NOT EXISTS caisse_benefices (
+  id BIGSERIAL PRIMARY KEY,
+  mois DATE NOT NULL UNIQUE,
+  benefice_brut DECIMAL(12,3) DEFAULT 0
+);
+
+-- Caisse: détail bénéfice par associé
+CREATE TABLE IF NOT EXISTS caisse_benefices_detail (
+  id BIGSERIAL PRIMARY KEY,
+  benefice_id BIGINT REFERENCES caisse_benefices(id),
+  associe_id BIGINT REFERENCES caisse_associes(id),
+  part_brute DECIMAL(12,3) DEFAULT 0,
+  total_avances DECIMAL(12,3) DEFAULT 0,
+  solde_a_payer DECIMAL(12,3) DEFAULT 0
+);

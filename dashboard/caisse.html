@@ -76,6 +76,12 @@
 .filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px }
 .highlight-row { animation:hlFade 5s ease-out }
 @keyframes hlFade { 0% { background:#fef3cd } 100% { background:inherit } }
+.benef-summary { display:flex; gap:12px; flex-wrap:wrap }
+.benef-card { flex:1; min-width:140px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; padding:12px; text-align:center }
+.benef-card .benef-label { display:block; font-size:11px; color:#666; font-weight:500 }
+.benef-card .benef-value { display:block; font-size:20px; font-weight:700; margin-top:4px }
+.benef-card.benef-brut { background:#fff7ed; border-color:#fdba74 }
+.benef-card.benef-brut .benef-value { color:#c2410c }
 @media(max-width:600px){ .caisse-form { grid-template-columns:1fr } .insights-grid { grid-template-columns:1fr } }
 </style>
 </head>
@@ -104,6 +110,7 @@
     <a href="#" data-caisse="media_buy">Media Buy</a>
     <a href="#" data-caisse="loyer_charges">Loyer & Charges</a>
     <a href="#" data-caisse="achats">Achats</a>
+    <a href="#" data-caisse="benefices" style="font-weight:600;color:#0f7b73">Bénéfices & Avances</a>
     <a href="#" data-caisse="config" style="font-weight:500">Configuration</a>
   </div>
 
@@ -139,7 +146,7 @@ function todayFR() {
 }
 function qs() {
   var p = new URLSearchParams();
-  if (currentTab && currentTab !== 'new-op' && currentTab !== 'config') p.set('caisse', currentTab);
+  if (currentTab && currentTab !== 'new-op' && currentTab !== 'config' && currentTab !== 'benefices') p.set('caisse', currentTab);
   return p.toString();
 }
 
@@ -159,6 +166,7 @@ function render() {
   if (currentTab === 'new-op') renderNewOp();
   else if (currentTab === 'paiements') renderPaiements();
   else if (currentTab === 'config') renderConfig();
+  else if (currentTab === 'benefices') renderBenefices();
   else renderNormalView();
   checkMediaBuyThreshold();
 }
@@ -694,6 +702,217 @@ function saveConfig() {
   });
 }
 
+// --- Bénéfices & Avances Tab ---
+var CAISSE_LABELS_BENEF = { associes: 'Associés', achats: 'Achats' };
+
+function renderBenefices() {
+  document.getElementById('exportBar').style.display = 'none';
+  var now = new Date();
+  var defaultMois = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+
+  var html = '';
+
+  // Section 1: Associés CRUD
+  html += '<div class="card" style="margin-bottom:12px">';
+  html += '<h2 style="margin:0 0 8px">Associés <span style="font-size:12px;font-weight:400;color:#666">(% individuels, somme doit être 100%)</span></h2>';
+  html += '<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap">';
+  html += '<input type="text" id="benefNom" class="input" placeholder="Nom" style="width:150px">';
+  html += '<input type="number" id="benefPct" class="input" step="0.01" min="0" max="100" placeholder="%" style="width:60px">';
+  html += '<button class="btn btn-sm btn-primary" onclick="addAssocie()">Ajouter</button>';
+  html += '</div>';
+  html += '<table class="caisse-table"><thead><tr><th>Nom</th><th>%</th><th>Actif</th><th></th></tr></thead><tbody id="benefAssociesBody"><tr><td colspan="4" style="color:#888;text-align:center">Chargement...</td></tr></tbody></table>';
+  html += '<div id="benefTotalPct" style="margin-top:4px;font-size:12px;font-weight:600"></div>';
+  html += '</div>';
+
+  // Section 2: Avances
+  html += '<div class="card" style="margin-bottom:12px">';
+  html += '<h2 style="margin:0 0 8px">Avances sur bénéfices</h2>';
+  html += '<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">';
+  html += '<select id="benefAvanceAssocie" class="input" style="width:130px"><option value="">Associé</option></select>';
+  html += '<select id="benefAvanceSource" class="input" style="width:120px"><option value="associes">Caisse Associés</option><option value="achats">Caisse Achats</option></select>';
+  html += '<input type="number" id="benefAvanceMontant" class="input" step="0.001" min="0" placeholder="Montant" style="width:90px">';
+  html += '<input type="text" id="benefAvanceNote" class="input" placeholder="Note" style="width:120px">';
+  html += '<button class="btn btn-sm btn-primary" onclick="addAvance()">Enregistrer</button>';
+  html += '</div>';
+  html += '<table class="caisse-table"><thead><tr><th>Date</th><th>Associé</th><th>Source</th><th>Montant</th><th>Statut</th></tr></thead><tbody id="benefAvancesBody"><tr><td colspan="5" style="color:#888;text-align:center">Chargement...</td></tr></tbody></table>';
+  html += '</div>';
+
+  // Section 3: Bénéfice actuel
+  html += '<div class="card" style="margin-bottom:12px">';
+  html += '<h2 style="margin:0 0 8px">Bénéfice mensuel</h2>';
+  html += '<div style="margin-bottom:8px;display:flex;gap:6px;align-items:center">';
+  html += '<input type="month" id="benefMois" class="input" value="' + defaultMois + '" style="width:160px">';
+  html += '<button class="btn btn-sm" onclick="loadBeneficeCourant()">Afficher</button>';
+  html += '<button class="btn btn-sm btn-primary" onclick="saveBenefice()" id="benefSaveBtn" disabled>Enregistrer le mois</button>';
+  html += '</div>';
+  html += '<div id="benefCourant"><p style="color:#888">Sélectionnez un mois et cliquez "Afficher"</p></div>';
+  html += '</div>';
+
+  // Section 4: Historique
+  html += '<div class="card">';
+  html += '<h2 style="margin:0 0 8px">Historique des bénéfices</h2>';
+  html += '<table class="caisse-table"><thead><tr><th>Mois</th><th>Bénéfice brut</th><th>Détail</th></tr></thead><tbody id="benefHistoriqueBody"><tr><td colspan="3" style="color:#888;text-align:center">Chargement...</td></tr></tbody></table>';
+  html += '</div>';
+
+  document.getElementById('caisseContent').innerHTML = html;
+
+  // Load data
+  loadAssocies();
+  loadAvances();
+  loadHistoriqueBenefices();
+  loadBeneficeCourant();
+}
+
+function loadAssocies() {
+  apiP('/api/caisse/associes').then(function(r) { return r.json(); }).then(function(list) {
+    var h = '', totalPct = 0;
+    list.forEach(function(a) {
+      totalPct += parseFloat(a.pct) || 0;
+      h += '<tr>';
+      h += '<td><input type="text" class="input" id="benefNom_' + a.id + '" value="' + esc(a.nom) + '" style="width:120px"></td>';
+      h += '<td><input type="number" class="input" id="benefPct_' + a.id + '" step="0.01" min="0" max="100" value="' + parseFloat(a.pct).toFixed(2) + '" style="width:60px"></td>';
+      h += '<td><input type="checkbox" id="benefActif_' + a.id + '" ' + (a.actif ? 'checked' : '') + '></td>';
+      h += '<td class="actions"><a href="#" onclick="updateAssocie(' + a.id + ');return false">💾</a> <a href="#" onclick="deleteAssocie(' + a.id + ');return false">🗑️</a></td>';
+      h += '</tr>';
+    });
+    document.getElementById('benefAssociesBody').innerHTML = h || '<tr><td colspan="4" style="color:#888;text-align:center">Aucun associé</td></tr>';
+    var warn = Math.abs(totalPct - 100) > 0.01 ? ' <span style="color:#e74a3b">⚠ Total ' + totalPct.toFixed(2) + '% (doit être 100%)</span>' : ' <span style="color:#1cc88a">✓ Total ' + totalPct.toFixed(2) + '%</span>';
+    document.getElementById('benefTotalPct').innerHTML = 'Somme des % : ' + warn;
+
+    // Populate select for avances
+    var sel = document.getElementById('benefAvanceAssocie');
+    sel.innerHTML = '<option value="">Associé</option>';
+    list.forEach(function(a) {
+      sel.innerHTML += '<option value="' + a.id + '">' + esc(a.nom) + '</option>';
+    });
+  });
+}
+
+function addAssocie() {
+  var nom = document.getElementById('benefNom').value.trim();
+  var pct = parseFloat(document.getElementById('benefPct').value) || 0;
+  if (!nom) { alert('Nom requis'); return; }
+  apiP('/api/caisse/associes', { method: 'POST', body: JSON.stringify({ nom: nom, pct: pct }) }).then(function(r) {
+    if (!r.ok) { r.json().then(function(e) { alert(e.error || 'Erreur'); }); return; }
+    document.getElementById('benefNom').value = '';
+    document.getElementById('benefPct').value = '';
+    loadAssocies();
+  });
+}
+
+function updateAssocie(id) {
+  var nom = document.getElementById('benefNom_' + id).value.trim();
+  var pct = parseFloat(document.getElementById('benefPct_' + id).value) || 0;
+  var actif = document.getElementById('benefActif_' + id).checked;
+  if (!nom) { alert('Nom requis'); return; }
+  apiP('/api/caisse/associes/' + id, { method: 'PUT', body: JSON.stringify({ nom: nom, pct: pct, actif: actif }) }).then(function(r) {
+    if (!r.ok) { r.json().then(function(e) { alert(e.error || 'Erreur'); }); return; }
+    loadAssocies();
+  });
+}
+
+function deleteAssocie(id) {
+  if (!confirm('Supprimer cet associé ?')) return;
+  apiP('/api/caisse/associes/' + id, { method: 'DELETE' }).then(function() { loadAssocies(); });
+}
+
+function loadAvances() {
+  apiP('/api/caisse/avances').then(function(r) { return r.json(); }).then(function(list) {
+    var h = '';
+    list.forEach(function(a) {
+      var nom = a.caisse_associes ? a.caisse_associes.nom : '#' + a.associe_id;
+      var statut = a.rembourse ? '<span style="color:#1cc88a">Remboursée</span>' : '<span style="color:#e74a3b">En cours</span>';
+      h += '<tr>';
+      h += '<td>' + fmtFR(a.date_avance) + '</td><td>' + esc(nom) + '</td><td>' + esc(CAISSE_LABELS_BENEF[a.source_caisse] || a.source_caisse) + '</td>';
+      h += '<td>' + Number(a.montant).toFixed(3) + '</td><td>' + statut + '</td>';
+      h += '</tr>';
+    });
+    document.getElementById('benefAvancesBody').innerHTML = h || '<tr><td colspan="5" style="color:#888;text-align:center">Aucune avance</td></tr>';
+  });
+}
+
+function addAvance() {
+  var associeId = document.getElementById('benefAvanceAssocie').value;
+  var source = document.getElementById('benefAvanceSource').value;
+  var montant = parseFloat(document.getElementById('benefAvanceMontant').value);
+  var note = document.getElementById('benefAvanceNote').value.trim();
+  if (!associeId) { alert('Sélectionnez un associé'); return; }
+  if (!montant || montant <= 0) { alert('Montant invalide'); return; }
+  apiP('/api/caisse/avances', { method: 'POST', body: JSON.stringify({ associe_id: parseInt(associeId), source_caisse: source, montant: montant, note: note || '', date_avance: todayFR() }) }).then(function(r) {
+    if (!r.ok) { r.json().then(function(e) { alert(e.error || 'Erreur'); }); return; }
+    document.getElementById('benefAvanceMontant').value = '';
+    document.getElementById('benefAvanceNote').value = '';
+    loadAvances();
+    loadBeneficeCourant();
+  });
+}
+
+function loadBeneficeCourant() {
+  var mois = document.getElementById('benefMois').value;
+  if (!mois) return;
+  var el = document.getElementById('benefCourant');
+  el.innerHTML = '<p style="color:#888">Calcul...</p>';
+  apiP('/api/caisse/benefices/current?mois=' + mois).then(function(r) { return r.json(); }).then(function(data) {
+    var h = '<div class="benef-summary">';
+    h += '<div class="benef-card"><span class="benef-label">Solde Achats</span><span class="benef-value">' + data.solde_achats.toFixed(3) + '</span></div>';
+    h += '<div class="benef-card"><span class="benef-label">Solde Associés</span><span class="benef-value">' + data.solde_associes.toFixed(3) + '</span></div>';
+    h += '<div class="benef-card benef-brut"><span class="benef-label">Bénéfice brut</span><span class="benef-value">' + data.benefice_brut.toFixed(3) + '</span></div>';
+    h += '</div>';
+
+    if (data.details && data.details.length) {
+      h += '<table class="caisse-table" style="margin-top:8px"><thead><tr><th>Associé</th><th>%</th><th>Part brute</th><th>Avances</th><th>À payer</th></tr></thead><tbody>';
+      data.details.forEach(function(d) {
+        var color = d.solde_a_payer >= 0 ? '#1cc88a' : '#e74a3b';
+        h += '<tr><td>' + esc(d.associe_nom) + '</td><td>' + d.pct.toFixed(2) + '%</td><td>' + d.part_brute.toFixed(3) + '</td><td style="color:#e74a3b">' + d.total_avances.toFixed(3) + '</td><td style="color:' + color + ';font-weight:600">' + d.solde_a_payer.toFixed(3) + '</td></tr>';
+      });
+      h += '</tbody></table>';
+      document.getElementById('benefSaveBtn').disabled = false;
+    } else {
+      h += '<p style="color:#888;margin-top:8px">Aucun associé actif configuré</p>';
+      document.getElementById('benefSaveBtn').disabled = true;
+    }
+
+    el.innerHTML = h;
+  }).catch(function(e) {
+    el.innerHTML = '<p style="color:#e74a3b">Erreur: ' + (e.message || '') + '</p>';
+  });
+}
+
+function saveBenefice() {
+  var mois = document.getElementById('benefMois').value;
+  if (!mois) return;
+  if (!confirm('Enregistrer le bénéfice de ' + mois + ' ?')) return;
+  var btn = document.getElementById('benefSaveBtn');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+  apiP('/api/caisse/benefices/calculer', { method: 'POST', body: JSON.stringify({ mois: mois }) }).then(function(r) {
+    if (!r.ok) { r.json().then(function(e) { alert(e.error || 'Erreur'); btn.textContent = 'Enregistrer le mois'; btn.disabled = false; }); return; }
+    alert('Bénéfice de ' + mois + ' enregistré');
+    btn.textContent = 'Enregistrer le mois';
+    loadHistoriqueBenefices();
+  }).catch(function(e) {
+    alert('Erreur: ' + e.message);
+    btn.textContent = 'Enregistrer le mois';
+    btn.disabled = false;
+  });
+}
+
+function loadHistoriqueBenefices() {
+  apiP('/api/caisse/benefices').then(function(r) { return r.json(); }).then(function(list) {
+    var h = '';
+    list.forEach(function(b) {
+      var d = b.mois ? b.mois.substring(0, 7) : '?';
+      var detailHtml = '';
+      (b.details || []).forEach(function(dd) {
+        var nom = dd.caisse_associes ? dd.caisse_associes.nom : '#' + dd.associe_id;
+        detailHtml += '<div style="font-size:11px">' + esc(nom) + ': part ' + dd.part_brute.toFixed(3) + ' − av. ' + dd.total_avances.toFixed(3) + ' = <strong>' + dd.solde_a_payer.toFixed(3) + '</strong></div>';
+      });
+      h += '<tr><td>' + d + '</td><td>' + Number(b.benefice_brut).toFixed(3) + '</td><td>' + (detailHtml || '<span style="color:#888">—</span>') + '</td></tr>';
+    });
+    document.getElementById('benefHistoriqueBody').innerHTML = h || '<tr><td colspan="3" style="color:#888;text-align:center">Aucun bénéfice enregistré</td></tr>';
+  });
+}
+
 function loadChart(canvasId, url) {
   apiP(url).then(function(r) { return r.json(); }).then(function(data) {
     if (chart) chart.destroy();
@@ -797,7 +1016,7 @@ function editOp(id) {
 
 function deleteOp(id) {
   if (!confirm('Supprimer cette opération ? Les écritures de quota liées seront aussi supprimées.')) return;
-  apiP('/api/caisse/operations/' + id, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() { if (currentTab !== 'new-op' && currentTab !== 'config') renderNormalView(); checkMediaBuyThreshold(); });
+  apiP('/api/caisse/operations/' + id, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() { if (currentTab !== 'new-op' && currentTab !== 'config' && currentTab !== 'benefices') renderNormalView(); checkMediaBuyThreshold(); });
 }
 
 function checkMediaBuyThreshold() {
@@ -830,7 +1049,7 @@ function switchTab(caisse) {
   render();
 }
 
-function switchPage(p) { currentPage = p; if (currentTab && currentTab !== 'new-op' && currentTab !== 'config') renderNormalView(); }
+function switchPage(p) { currentPage = p; if (currentTab && currentTab !== 'new-op' && currentTab !== 'config' && currentTab !== 'benefices') renderNormalView(); }
 
 function setType(t) { window._filterType = t; renderCaisseView(currentTab, qs(), currentPage, 20); }
 function applyDateFilter() { window._filterFrom = document.getElementById('fDateFrom').value; window._filterTo = document.getElementById('fDateTo').value; renderCaisseView(currentTab, qs(), currentPage, 20); }
