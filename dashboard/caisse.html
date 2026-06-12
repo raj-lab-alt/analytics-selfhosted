@@ -485,6 +485,7 @@ function validerPaiement() {
       detailHtml += '<div style="margin-top:4px;border-top:1px solid #d4edda;padding-top:4px">Recette nette (solde recettes) : <strong>' + recetteNet.toFixed(3) + ' TND</strong></div>';
       detailHtml += '</div>';
       msg.className = 'paiement-msg success';
+      msg.style.display = 'block';
       msg.innerHTML = detailHtml;
       document.getElementById('paiementMontant').value = '';
       document.getElementById('paiementLibelle').value = '';
@@ -495,6 +496,7 @@ function validerPaiement() {
     });
   }).catch(function(e) {
     msg.className = 'paiement-msg error';
+    msg.style.display = 'block';
     msg.innerHTML = '✗ Erreur : ' + (e.message || 'Échec de l\'enregistrement');
   }).finally(function() {
     btn.textContent = 'Valider';
