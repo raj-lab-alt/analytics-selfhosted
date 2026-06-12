@@ -23,6 +23,8 @@ async function runMigration() {
   try {
     const { Client } = require('pg');
     const url = process.env.DATABASE_URL;
+    const srKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = process.env.SUPABASE_URL;
     if (url && url.includes('supabase.co')) {
       const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
       await client.connect();
@@ -30,6 +32,18 @@ async function runMigration() {
       await client.end();
       console.log('Migration OK (pg direct)');
       return;
+    }
+    // If DATABASE_URL doesn't have supabase.co, try constructing from SUPABASE_URL
+    if (supabaseUrl && srKey) {
+      const ref = supabaseUrl.replace('https://', '').split('.')[0];
+      try {
+        const client = new Client({ host: 'db.' + ref + '.supabase.co', port: 5432, database: 'postgres', user: 'postgres', password: srKey, ssl: { rejectUnauthorized: false } });
+        await client.connect();
+        await client.query(sql);
+        await client.end();
+        console.log('Migration OK (pg direct)');
+        return;
+      } catch(e2) {}
     }
   } catch (e) {
     // pg not available or connect failed

@@ -177,8 +177,8 @@ ${caisseSql.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
 
 setupWebSocket(wss);
 
-// Run migration on startup then aggregation
-runMigration();
+// Run migration on startup then aggregation (non-blocking)
+runMigration().catch(() => {});
 aggregateDaily();
 aggregateHourly();
 setTimeout(() => cleanupStaleSessions(), 60000);
