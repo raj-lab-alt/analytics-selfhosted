@@ -336,6 +336,8 @@ function renderPaiements() {
   html += '<div class="paiement-card">';
   html += '<h3>Montant du paiement (TND)</h3>';
   html += '<input type="number" id="paiementMontant" class="paiement-input" step="0.001" min="0" placeholder="0.000">';
+  html += '<p style="margin-top:10px"><label style="font-weight:600;font-size:13px">Libellé</label><br>';
+  html += '<input type="text" id="paiementLibelle" class="input" placeholder="Description du paiement" style="width:100%;font-size:14px;box-sizing:border-box"></p>';
   html += '<p style="margin-top:10px"><label style="font-weight:600;font-size:13px">Colis livrés</label><br>';
   html += '<input type="number" id="paiementColis" class="input" step="1" min="1" placeholder="0" style="width:120px;font-size:18px;font-weight:700"></p>';
   html += '<div id="paiementBreakdown" class="paiement-breakdown"></div>';
@@ -423,7 +425,7 @@ function validerPaiement() {
 
     var body = {
       operation_date: dateStr,
-      libelle: 'Encaissement paiement',
+      libelle: document.getElementById('paiementLibelle').value.trim() || 'Encaissement paiement',
       type: 'in',
       amount: amt,
       caisse: 'recettes',
@@ -437,6 +439,7 @@ function validerPaiement() {
       msg.className = 'paiement-msg success';
       msg.textContent = '✓ Paiement enregistré avec succès';
       document.getElementById('paiementMontant').value = '';
+      document.getElementById('paiementLibelle').value = '';
       document.getElementById('paiementColis').value = '';
       document.getElementById('paiementBreakdown').innerHTML = '';
       btn.disabled = true;
