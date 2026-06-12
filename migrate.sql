@@ -101,15 +101,22 @@ ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS utm_medium VARCHAR(100) DEF
 ALTER TABLE active_sessions ADD COLUMN IF NOT EXISTS utm_campaign VARCHAR(200) DEFAULT '';
 ALTER TABLE heatmap_events ADD COLUMN IF NOT EXISTS device_type VARCHAR(10) DEFAULT '';
 
+ALTER TABLE caisse_operations ADD COLUMN IF NOT EXISTS libelle VARCHAR(255) NOT NULL DEFAULT '';
+ALTER TABLE caisse_operations ADD COLUMN IF NOT EXISTS caisse VARCHAR(20) NOT NULL DEFAULT 'recettes';
+CREATE INDEX IF NOT EXISTS idx_caisse_caisse ON caisse_operations (caisse);
+
 CREATE TABLE IF NOT EXISTS caisse_operations (
   id BIGSERIAL PRIMARY KEY,
   operation_date DATE NOT NULL,
+  libelle VARCHAR(255) NOT NULL DEFAULT '',
   type VARCHAR(10) NOT NULL CHECK (type IN ('in','out')),
   amount DECIMAL(12,3) NOT NULL,
   currency CHAR(3) NOT NULL DEFAULT 'TND',
+  caisse VARCHAR(20) NOT NULL DEFAULT 'recettes',
   payment_method VARCHAR(30) DEFAULT '',
   reference VARCHAR(100) DEFAULT '',
   note TEXT DEFAULT '',
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_caisse_date ON caisse_operations (operation_date);
+CREATE INDEX IF NOT EXISTS idx_caisse_caisse ON caisse_operations (caisse);

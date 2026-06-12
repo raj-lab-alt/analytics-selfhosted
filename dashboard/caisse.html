@@ -7,31 +7,46 @@
 <link rel="stylesheet" href="/assets/dashboard.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
-.caisse-grid { display:flex; gap:12px; margin-bottom:16px; flex-wrap:wrap }
-.caisse-grid .stat-card { flex:1; min-width:140px }
-.caisse-form { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px }
-.caisse-form p { margin:0 }
+.caisse-tabs { display:flex; gap:0; margin-bottom:16px; flex-wrap:wrap }
+.caisse-tabs a { padding:8px 16px; border:1px solid #ddd; background:#f9f9f9; text-decoration:none; color:#333; font-size:13px; font-weight:500 }
+.caisse-tabs a:first-child { border-radius:6px 0 0 6px }
+.caisse-tabs a:last-child { border-radius:0 6px 6px 0 }
+.caisse-tabs a.active { background:#4e73df; color:#fff; border-color:#4e73df }
+.caisse-tabs a:not(.active):hover { background:#e8e8e8 }
+
+.caisse-form { display:grid; grid-template-columns:1fr 1fr; gap:8px 24px }
+.caisse-form .full { grid-column:1/-1 }
 .caisse-form label { display:block; font-size:12px; color:#666; margin-bottom:2px }
-.caisse-form input, .caisse-form select, .caisse-form textarea { width:100%; box-sizing:border-box }
-.caisse-filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px }
-.caisse-filters .btn-group { display:flex; gap:4px }
-.caisse-export-btns { display:flex; gap:8px; margin-bottom:12px }
-.caisse-insights { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px }
-.caisse-insights .card { overflow:auto; max-height:320px }
-.caisse-insights table { width:100% }
-.chart-container { margin-bottom:16px }
+
+.amount-row { display:flex; gap:16px }
+.amount-field { flex:1 }
+.amount-field input { width:100%; box-sizing:border-box; font-size:18px; font-weight:700; padding:10px 12px; border:2px solid #ddd; border-radius:6px; outline:none }
+.amount-field.in input { border-color:#1cc88a; background:#f0fff4 }
+.amount-field.out input { border-color:#e74a3b; background:#fff5f5 }
+.amount-field label { text-align:center; font-weight:600 }
+.amount-field.in label { color:#1cc88a }
+.amount-field.out label { color:#e74a3b }
+
+.caisse-central-table { width:100% }
+.caisse-central-table th { background:#4e73df; color:#fff; text-align:left }
+.caisse-central-table td, .caisse-central-table th { padding:8px 12px }
+.caisse-central-table .total-row { font-weight:700; border-top:2px solid #333 }
+.caisse-central-table .clickable { cursor:pointer }
+.caisse-central-table .clickable:hover { background:#f0f4ff }
+
+.chart-container canvas { max-height:200px }
+.insights-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px }
+.insights-grid .card { overflow:auto; max-height:300px }
 .caisse-table-wrap { overflow-x:auto }
 .caisse-table { width:100% }
-.caisse-table .in { border-left:4px solid #1cc88a }
-.caisse-table .out { border-left:4px solid #e74a3b }
 .badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600 }
 .badge-in { background:#d4edda; color:#155724 }
 .badge-out { background:#f8d7da; color:#721c24 }
-.actions a { margin-right:4px; font-size:12px }
-.pagination { margin-top:12px; display:flex; gap:4px; justify-content:center }
+.pagination { margin-top:12px; display:flex; gap:4px; justify-content:center; flex-wrap:wrap }
 .pagination a { padding:4px 10px; border:1px solid #ddd; border-radius:4px; text-decoration:none; color:#333 }
 .pagination a.active { background:#4e73df; color:#fff; border-color:#4e73df }
-@media(max-width:600px){ .caisse-form { grid-template-columns:1fr } .caisse-insights { grid-template-columns:1fr } }
+.filters { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:12px }
+@media(max-width:600px){ .caisse-form { grid-template-columns:1fr } .insights-grid { grid-template-columns:1fr } }
 </style>
 </head>
 <body>
@@ -47,76 +62,66 @@
 <main class="container">
   <h1>Gestion de caisse</h1>
 
-  <!-- Summary cards -->
-  <div class="caisse-grid">
-    <div class="stat-card"><h3>Entrées</h3><p id="sumIn" style="color:#1cc88a;font-size:24px;font-weight:700">0.000</p></div>
-    <div class="stat-card"><h3>Sorties</h3><p id="sumOut" style="color:#e74a3b;font-size:24px;font-weight:700">0.000</p></div>
-    <div class="stat-card highlight"><h3>Solde</h3><p id="sumBalance" style="font-size:24px;font-weight:700">0.000</p></div>
+  <!-- Onglets -->
+  <div class="caisse-tabs" id="caisseTabs">
+    <a href="#" data-caisse="" class="active">Centrale</a>
+    <a href="#" data-caisse="recettes">Recettes</a>
+    <a href="#" data-caisse="associes">Associés</a>
+    <a href="#" data-caisse="media_buy">Media Buy</a>
+    <a href="#" data-caisse="loyer_charges">Loyer & Charges</a>
+    <a href="#" data-caisse="achats">Achats</a>
   </div>
 
-  <!-- Form -->
-  <div class="card" style="margin-bottom:16px" id="formCard">
+  <!-- Formulaire de saisie (toujours visible) -->
+  <div class="card" style="margin-bottom:16px">
     <h2 id="formTitle">Nouvelle opération</h2>
     <form id="opForm" class="caisse-form">
       <input type="hidden" name="edit_id" id="editId" value="">
-      <p><label>Type</label><select name="type" id="fType" required><option value="in">Entrée</option><option value="out">Sortie</option></select></p>
-      <p><label>Montant</label><input type="number" name="amount" id="fAmount" step="0.001" min="0" required></p>
-      <p><label>Devise</label><input type="text" name="currency" id="fCurrency" value="TND" maxlength="3" required></p>
-      <p><label>Date (jj/mm/aaaa)</label><input type="text" name="operation_date" id="fDate" placeholder="jj/mm/aaaa" required></p>
-      <p><label>Mode de paiement</label><input type="text" name="payment_method" id="fPayment" maxlength="30"></p>
-      <p><label>Référence</label><input type="text" name="reference" id="fRef" maxlength="100"></p>
-      <p style="grid-column:1/-1"><label>Note</label><textarea name="note" id="fNote" rows="2"></textarea></p>
-      <p style="grid-column:1/-1">
+      <p><label>Date</label><input type="text" id="fDate" class="input" placeholder="jj/mm/aaaa" required></p>
+      <p><label>Libellé</label><input type="text" id="fLibelle" class="input" placeholder="Description" required></p>
+      <div class="full amount-row">
+        <div class="amount-field in">
+          <label>Recette (Entrée)</label>
+          <input type="number" id="fAmountIn" step="0.001" min="0" placeholder="0.000">
+        </div>
+        <div class="amount-field out">
+          <label>Dépense (Sortie)</label>
+          <input type="number" id="fAmountOut" step="0.001" min="0" placeholder="0.000">
+        </div>
+      </div>
+      <p><label>Caisse auxiliaire</label>
+        <select id="fCaisse" class="input" required>
+          <option value="recettes">Recettes</option>
+          <option value="associes">Associés</option>
+          <option value="media_buy">Media Buy</option>
+          <option value="loyer_charges">Loyer & Charges</option>
+          <option value="achats">Achats</option>
+        </select>
+      </p>
+      <p><label>Mode de paiement</label><input type="text" id="fPayment" class="input" maxlength="30"></p>
+      <p><label>Référence</label><input type="text" id="fRef" class="input" maxlength="100"></p>
+      <p class="full"><label>Note</label><textarea id="fNote" class="input" rows="2"></textarea></p>
+      <p class="full">
         <button type="submit" class="btn btn-primary" id="formSubmit">Enregistrer</button>
         <button type="button" class="btn" id="formCancel" style="display:none" onclick="cancelEdit()">Annuler</button>
       </p>
     </form>
   </div>
 
-  <!-- Filters + Exports -->
-  <div class="caisse-filters">
-    <span style="font-weight:600">Filtrer:</span>
-    <div class="btn-group">
-      <button class="btn btn-sm" onclick="setType('')" id="ftAll">Toutes</button>
-      <button class="btn btn-sm" onclick="setType('in')" id="ftIn">Entrées</button>
-      <button class="btn btn-sm" onclick="setType('out')" id="ftOut">Sorties</button>
-    </div>
-    <input type="text" id="fDateFrom" class="input" placeholder="Du jj/mm/aaaa" style="width:120px">
-    <input type="text" id="fDateTo" class="input" placeholder="Au jj/mm/aaaa" style="width:120px">
-    <button class="btn btn-sm" onclick="applyFilters()">Appliquer</button>
-  </div>
-  <div class="caisse-export-btns">
+  <!-- Contenu dynamique -->
+  <div id="caisseContent"></div>
+
+  <!-- Exports -->
+  <div style="margin-top:12px;display:flex;gap:8px">
     <button class="btn btn-sm" onclick="downloadExport('csv')">Exporter CSV</button>
     <button class="btn btn-sm" onclick="downloadExport('pdf')">Exporter PDF</button>
-  </div>
-
-  <!-- Chart -->
-  <div class="card chart-container">
-    <h2>Courbe du solde</h2>
-    <canvas id="balanceChart" height="200"></canvas>
-  </div>
-
-  <!-- Daily + Monthly insights -->
-  <div class="caisse-insights">
-    <div class="card"><h2>Journalier</h2><div id="dailyTable"></div></div>
-    <div class="card"><h2>Mensuel</h2><div id="monthlyTable"></div></div>
-  </div>
-
-  <!-- Operations table -->
-  <div class="card">
-    <h2>Opérations</h2>
-    <div class="caisse-table-wrap">
-      <table class="caisse-table">
-        <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Devise</th><th>Mode</th><th>Réf</th><th>Note</th><th>Actions</th></tr></thead>
-        <tbody id="opsBody"></tbody>
-      </table>
-    </div>
-    <div id="pagination" class="pagination"></div>
   </div>
 </main>
 
 <script>
-let currentPage = 1, currentType = '', currentDateFrom = '', currentDateTo = '', chart;
+var CAISSES = ['recettes','associes','media_buy','loyer_charges','achats'];
+var CAISSE_LABELS = { recettes:'Recettes', associes:'Associés', media_buy:'Media Buy', loyer_charges:'Loyer & Charges', achats:'Achats' };
+var currentTab = '', currentPage = 1, chart = null;
 
 function getToken() { return localStorage.getItem('token'); }
 function apiP(path, opts) {
@@ -128,32 +133,35 @@ function fmtFR(d) {
   var m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? m[3]+'/'+m[2]+'/'+m[1] : d;
 }
-function toISO(d) {
-  var m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  return m ? m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0') : d;
-}
 function todayFR() {
   var d = new Date();
   return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
 }
 function qs() {
   var p = new URLSearchParams();
-  if (currentType) p.set('type', currentType);
-  if (currentDateFrom) p.set('date_from', toISO(currentDateFrom));
-  if (currentDateTo) p.set('date_to', toISO(currentDateTo));
+  if (currentTab) p.set('caisse', currentTab);
   return p.toString();
 }
-function setType(t) {
-  currentType = t;
-  document.querySelectorAll('.btn-group .btn').forEach(function(b) { b.classList.remove('active'); });
-  document.getElementById('ft'+(t||'All')).classList.add('active');
-  loadPage(1);
-}
-function applyFilters() {
-  currentDateFrom = document.getElementById('fDateFrom').value;
-  currentDateTo = document.getElementById('fDateTo').value;
-  loadPage(1);
-}
+
+// Tabs
+document.querySelectorAll('.caisse-tabs a').forEach(function(a) {
+  a.addEventListener('click', function(e) {
+    e.preventDefault();
+    document.querySelectorAll('.caisse-tabs a').forEach(function(x) { x.classList.remove('active'); });
+    a.classList.add('active');
+    currentTab = a.dataset.caisse;
+    currentPage = 1;
+    render();
+  });
+});
+
+// Form: clear the opposite amount field
+document.getElementById('fAmountIn').addEventListener('input', function() {
+  if (this.value) document.getElementById('fAmountOut').value = '';
+});
+document.getElementById('fAmountOut').addEventListener('input', function() {
+  if (this.value) document.getElementById('fAmountIn').value = '';
+});
 
 function cancelEdit() {
   document.getElementById('editId').value = '';
@@ -172,10 +180,16 @@ function editOp(id) {
     document.getElementById('formTitle').textContent = 'Modifier opération #' + op.id;
     document.getElementById('formSubmit').textContent = 'Enregistrer';
     document.getElementById('formCancel').style.display = 'inline-block';
-    document.getElementById('fType').value = op.type;
-    document.getElementById('fAmount').value = op.amount;
-    document.getElementById('fCurrency').value = op.currency;
     document.getElementById('fDate').value = fmtFR(op.operation_date);
+    document.getElementById('fLibelle').value = op.libelle || '';
+    if (op.type === 'in') {
+      document.getElementById('fAmountIn').value = op.amount;
+      document.getElementById('fAmountOut').value = '';
+    } else {
+      document.getElementById('fAmountOut').value = op.amount;
+      document.getElementById('fAmountIn').value = '';
+    }
+    document.getElementById('fCaisse').value = op.caisse || 'recettes';
     document.getElementById('fPayment').value = op.payment_method || '';
     document.getElementById('fRef').value = op.reference || '';
     document.getElementById('fNote').value = op.note || '';
@@ -184,19 +198,24 @@ function editOp(id) {
 
 function deleteOp(id) {
   if (!confirm('Supprimer cette opération ?')) return;
-  apiP('/api/caisse/operations/' + id, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() {
-    loadPage(currentPage);
-  });
+  apiP('/api/caisse/operations/' + id, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() { render(); });
 }
 
 document.getElementById('opForm').addEventListener('submit', function(e) {
   e.preventDefault();
   var editId = document.getElementById('editId').value;
+  var amtIn = parseFloat(document.getElementById('fAmountIn').value) || 0;
+  var amtOut = parseFloat(document.getElementById('fAmountOut').value) || 0;
+  if (!amtIn && !amtOut) { alert('Saisissez un montant en Recette ou en Dépense'); return; }
+  if (amtIn && amtOut) { alert('Un seul montant à la fois (Recette OU Dépense)'); return; }
+  var type = amtIn ? 'in' : 'out';
+  var amount = amtIn || amtOut;
   var body = {
-    type: document.getElementById('fType').value,
-    amount: document.getElementById('fAmount').value,
-    currency: document.getElementById('fCurrency').value,
     operation_date: document.getElementById('fDate').value,
+    libelle: document.getElementById('fLibelle').value,
+    type: type,
+    amount: amount,
+    caisse: document.getElementById('fCaisse').value,
     payment_method: document.getElementById('fPayment').value,
     reference: document.getElementById('fRef').value,
     note: document.getElementById('fNote').value,
@@ -206,115 +225,238 @@ document.getElementById('opForm').addEventListener('submit', function(e) {
   apiP(url, { method: method, body: JSON.stringify(body) }).then(function(r) {
     if (!r.ok) { r.json().then(function(e) { alert(e.error || 'Erreur'); }); return; }
     cancelEdit();
-    loadPage(1);
+    render();
   });
 });
 
-function loadPage(page) {
-  currentPage = page;
-  var perPage = 20;
+function render() {
   var s = qs();
-  Promise.all([
-    apiP('/api/caisse/operations?' + s + '&page=' + page + '&per_page=' + perPage).then(function(r) { return r.json(); }),
-    apiP('/api/caisse/operations/count?' + s).then(function(r) { return r.json(); }),
-    apiP('/api/caisse/summary?' + s).then(function(r) { return r.json(); }),
-    apiP('/api/caisse/daily?' + s).then(function(r) { return r.json(); }),
-    apiP('/api/caisse/monthly?' + s).then(function(r) { return r.json(); }),
-    apiP('/api/caisse/chart?days=30').then(function(r) { return r.json(); }),
-  ]).then(function(res) {
-    var ops = res[0], countData = res[1], summary = res[2], daily = res[3], monthly = res[4], chartData = res[5];
-    var total = countData.count || 0;
-    var pages = Math.max(1, Math.ceil(total / perPage));
+  var perPage = 20;
+  var p = currentPage;
 
-    // Summary cards
-    document.getElementById('sumIn').textContent = (summary.in || 0).toFixed(3);
-    document.getElementById('sumOut').textContent = (summary.out || 0).toFixed(3);
-    document.getElementById('sumBalance').textContent = (summary.balance || 0).toFixed(3);
+  if (currentTab === '') {
+    renderCentral();
+  } else {
+    renderCaisseView(currentTab, s, p, perPage);
+  }
 
-    // Table
-    var html = '';
-    if (!ops.length) {
-      html = '<tr><td colspan="8" style="color:#888;text-align:center">Aucune opération</td></tr>';
-    } else {
-      ops.forEach(function(o) {
-        var isIn = o.type === 'in';
-        var typeLabel = isIn ? 'Entrée' : 'Sortie';
-        html += '<tr class="' + (isIn?'in':'out') + '">';
-        html += '<td>' + fmtFR(o.operation_date) + '</td>';
-        html += '<td><span class="badge ' + (isIn?'badge-in':'badge-out') + '">' + typeLabel + '</span></td>';
-        html += '<td>' + Number(o.amount).toFixed(3) + '</td>';
-        html += '<td>' + (o.currency||'') + '</td>';
-        html += '<td>' + esc(o.payment_method) + '</td>';
-        html += '<td>' + esc(o.reference) + '</td>';
-        html += '<td>' + esc(o.note) + '</td>';
-        html += '<td class="actions"><a href="#" onclick="editOp('+o.id+')">✏️</a> <a href="#" onclick="deleteOp('+o.id+')">🗑️</a></td>';
-        html += '</tr>';
-      });
-    }
-    document.getElementById('opsBody').innerHTML = html;
-
-    // Pagination
-    var phtml = '';
-    for (var i = 1; i <= pages; i++) {
-      phtml += '<a href="#" class="' + (i === page ? 'active' : '') + '" onclick="loadPage('+i+');return false">' + i + '</a>';
-    }
-    document.getElementById('pagination').innerHTML = phtml;
-
-    // Daily table
-    var dhtml = '<table><thead><tr><th>Date</th><th>Entrées</th><th>Sorties</th><th>Net</th></tr></thead><tbody>';
-    if (!daily.length) dhtml += '<tr><td colspan="4" style="color:#888">Aucune donnée</td></tr>';
-    else daily.forEach(function(r) {
-      dhtml += '<tr><td>' + fmtFR(r.day) + '</td><td>' + r.in_total.toFixed(3) + '</td><td>' + r.out_total.toFixed(3) + '</td><td>' + (r.in_total - r.out_total).toFixed(3) + '</td></tr>';
-    });
-    dhtml += '</tbody></table>';
-    document.getElementById('dailyTable').innerHTML = dhtml;
-
-    // Monthly table
-    var mhtml = '<table><thead><tr><th>Mois</th><th>Entrées</th><th>Sorties</th><th>Net</th></tr></thead><tbody>';
-    if (!monthly.length) mhtml += '<tr><td colspan="4" style="color:#888">Aucune donnée</td></tr>';
-    else monthly.forEach(function(r) {
-      var label = r.month + '-01';
-      var d = new Date(label + 'T00:00:00');
-      var monthName = d.toLocaleString('fr', { month:'short', year:'numeric' });
-      mhtml += '<tr><td>' + monthName + '</td><td>' + r.in_total.toFixed(3) + '</td><td>' + r.out_total.toFixed(3) + '</td><td>' + (r.in_total - r.out_total).toFixed(3) + '</td></tr>';
-    });
-    mhtml += '</tbody></table>';
-    document.getElementById('monthlyTable').innerHTML = mhtml;
-
-    // Chart
-    if (chart) chart.destroy();
-    var ctx = document.getElementById('balanceChart').getContext('2d');
-    chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: chartData.map(function(p) { var d = p.date; return d ? d.slice(8,10)+'/'+d.slice(5,7) : ''; }),
-        datasets: [{
-          label: 'Solde',
-          data: chartData.map(function(p) { return p.balance; }),
-          borderColor: '#0f7b73',
-          backgroundColor: 'rgba(15,123,115,0.1)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 2,
-        }]
-      },
-      options: {
-        responsive: true,
-        scales: { y: { beginAtZero: false } },
-        plugins: { legend: { display: false } }
+  // Summary cards
+  apiP('/api/caisse/summary?' + s).then(function(r) { return r.json(); }).then(function(sum) {
+    var html = '<div class="stats-grid" style="margin-bottom:16px">';
+    if (currentTab) {
+      var c = sum.caisses[currentTab];
+      if (c) {
+        html += '<div class="stat-card highlight"><h3>Solde</h3><p style="font-size:24px">'+c.balance.toFixed(3)+'</p></div>';
+        html += '<div class="stat-card"><h3>Entrées</h3><p style="color:#1cc88a;font-size:20px">'+c.in.toFixed(3)+'</p></div>';
+        html += '<div class="stat-card"><h3>Sorties</h3><p style="color:#e74a3b;font-size:20px">'+c.out.toFixed(3)+'</p></div>';
       }
-    });
-
+    } else {
+      html += '<div class="stat-card highlight"><h3>Solde global</h3><p style="font-size:24px">'+sum.central.balance.toFixed(3)+'</p></div>';
+      html += '<div class="stat-card"><h3>Total Entrées</h3><p style="color:#1cc88a;font-size:20px">'+sum.central.in.toFixed(3)+'</p></div>';
+      html += '<div class="stat-card"><h3>Total Sorties</h3><p style="color:#e74a3b;font-size:20px">'+sum.central.out.toFixed(3)+'</p></div>';
+    }
+    html += '</div>';
+    var el = document.getElementById('caisseContent');
+    if (el) el.innerHTML = html + el.innerHTML;
   });
 }
 
-function esc(s) {
-  if (s == null) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function renderCentral() {
+  var html = '';
+
+  // Tableau central
+  html += '<div class="card" style="margin-bottom:16px"><h2>Centrale — Synthèse par caisse</h2>';
+  html += '<table class="caisse-central-table"><thead><tr><th>Caisse</th><th>Entrées</th><th>Sorties</th><th>Solde</th></tr></thead><tbody id="centralRows"></tbody></table></div>';
+
+  // Chart
+  html += '<div class="card chart-container"><h2>Évolution du solde global</h2><canvas id="centralChart" height="180"></canvas></div>';
+
+  // Insights
+  html += '<div class="insights-grid"><div class="card"><h2>Journalier</h2><div id="dailyTable"></div></div>';
+  html += '<div class="card"><h2>Mensuel</h2><div id="monthlyTable"></div></div></div>';
+
+  html += '<div class="card"><h2>Toutes les opérations</h2><div class="caisse-table-wrap"><table class="caisse-table"><thead><tr><th>Date</th><th>Libellé</th><th>Caisse</th><th>Type</th><th>Montant</th><th>Actions</th></tr></thead><tbody id="opsBody"></tbody></table></div><div id="pagination" class="pagination"></div></div>';
+
+  document.getElementById('caisseContent').innerHTML = html;
+
+  // Load central table
+  apiP('/api/caisse/central').then(function(r) { return r.json(); }).then(function(d) {
+    var rows = '';
+    d.rows.forEach(function(r) {
+      rows += '<tr class="clickable" onclick="switchTab(\''+r.caisse+'\')"><td><strong>'+esc(r.label)+'</strong></td><td>'+r.in.toFixed(3)+'</td><td>'+r.out.toFixed(3)+'</td><td><strong>'+r.balance.toFixed(3)+'</strong></td></tr>';
+    });
+    rows += '<tr class="total-row"><td><strong>Total</strong></td><td>'+d.central.in.toFixed(3)+'</td><td>'+d.central.out.toFixed(3)+'</td><td>'+d.central.balance.toFixed(3)+'</td></tr>';
+    document.getElementById('centralRows').innerHTML = rows;
+  });
+
+  // Load chart
+  loadChart('centralChart', '/api/caisse/chart?days=30');
+
+  // Load daily/monthly
+  apiP('/api/caisse/daily').then(function(r) { return r.json(); }).then(function(data) {
+    var h = '<table><thead><tr><th>Date</th><th>Entrées</th><th>Sorties</th><th>Net</th></tr></thead><tbody>';
+    if (!data.length) h += '<tr><td colspan="4" style="color:#888">Aucune donnée</td></tr>';
+    else data.forEach(function(r) { h += '<tr><td>'+fmtFR(r.day)+'</td><td>'+r.in_total.toFixed(3)+'</td><td>'+r.out_total.toFixed(3)+'</td><td>'+(r.in_total-r.out_total).toFixed(3)+'</td></tr>'; });
+    h += '</tbody></table>';
+    document.getElementById('dailyTable').innerHTML = h;
+  });
+  apiP('/api/caisse/monthly').then(function(r) { return r.json(); }).then(function(data) {
+    var h = '<table><thead><tr><th>Mois</th><th>Entrées</th><th>Sorties</th><th>Net</th></tr></thead><tbody>';
+    if (!data.length) h += '<tr><td colspan="4" style="color:#888">Aucune donnée</td></tr>';
+    else data.forEach(function(r) {
+      var d = new Date(r.month+'-01T00:00:00');
+      h += '<tr><td>'+d.toLocaleString('fr',{month:'short',year:'numeric'})+'</td><td>'+r.in_total.toFixed(3)+'</td><td>'+r.out_total.toFixed(3)+'</td><td>'+(r.in_total-r.out_total).toFixed(3)+'</td></tr>';
+    });
+    h += '</tbody></table>';
+    document.getElementById('monthlyTable').innerHTML = h;
+  });
+
+  // Load operations
+  loadOps();
 }
+
+function renderCaisseView(tab, s, page, perPage) {
+  var label = CAISSE_LABELS[tab] || tab;
+  var html = '';
+
+  // Chart
+  html += '<div class="card chart-container"><h2>Évolution du solde — '+esc(label)+'</h2><canvas id="caisseChart" height="180"></canvas></div>';
+
+  // Insights
+  html += '<div class="insights-grid"><div class="card"><h2>Journalier</h2><div id="dailyTable2"></div></div>';
+  html += '<div class="card"><h2>Mensuel</h2><div id="monthlyTable2"></div></div></div>';
+
+  // Filters
+  html += '<div class="filters"><span style="font-weight:600">Filtrer type:</span>';
+  html += '<button class="btn btn-sm" onclick="setType(\'\')" id="ftAll">Tous</button>';
+  html += '<button class="btn btn-sm" onclick="setType(\'in\')" id="ftIn">Entrées</button>';
+  html += '<button class="btn btn-sm" onclick="setType(\'out\')" id="ftOut">Sorties</button>';
+  html += ' <input type="text" id="fDateFrom" class="input" placeholder="Du jj/mm/aaaa" style="width:110px">';
+  html += ' <input type="text" id="fDateTo" class="input" placeholder="Au jj/mm/aaaa" style="width:110px">';
+  html += ' <button class="btn btn-sm" onclick="applyDateFilter()">OK</button></div>';
+
+  // Table
+  html += '<div class="card"><h2>Opérations — '+esc(label)+'</h2>';
+  html += '<div class="caisse-table-wrap"><table class="caisse-table"><thead><tr><th>Date</th><th>Libellé</th><th>Type</th><th>Montant</th><th>Mode</th><th>Actions</th></tr></thead><tbody id="opsBody2"></tbody></table></div>';
+  html += '<div id="pagination2" class="pagination"></div></div>';
+
+  document.getElementById('caisseContent').innerHTML = html;
+
+  // Load chart
+  loadChart('caisseChart', '/api/caisse/chart?days=30&caisse='+tab);
+
+  // Load daily/monthly
+  apiP('/api/caisse/daily?caisse='+tab).then(function(r) { return r.json(); }).then(function(data) {
+    var h = '<table><thead><tr><th>Date</th><th>Entrées</th><th>Sorties</th><th>Net</th></tr></thead><tbody>';
+    if (!data.length) h += '<tr><td colspan="4" style="color:#888">Aucune donnée</td></tr>';
+    else data.forEach(function(r) { h += '<tr><td>'+fmtFR(r.day)+'</td><td>'+r.in_total.toFixed(3)+'</td><td>'+r.out_total.toFixed(3)+'</td><td>'+(r.in_total-r.out_total).toFixed(3)+'</td></tr>'; });
+    h += '</tbody></table>';
+    document.getElementById('dailyTable2').innerHTML = h;
+  });
+  apiP('/api/caisse/monthly?caisse='+tab).then(function(r) { return r.json(); }).then(function(data) {
+    var h = '<table><thead><tr><th>Mois</th><th>Entrées</th><th>Sorties</th><th>Net</th></tr></thead><tbody>';
+    if (!data.length) h += '<tr><td colspan="4" style="color:#888">Aucune donnée</td></tr>';
+    else data.forEach(function(r) {
+      var d = new Date(r.month+'-01T00:00:00');
+      h += '<tr><td>'+d.toLocaleString('fr',{month:'short',year:'numeric'})+'</td><td>'+r.in_total.toFixed(3)+'</td><td>'+r.out_total.toFixed(3)+'</td><td>'+(r.in_total-r.out_total).toFixed(3)+'</td></tr>';
+    });
+    h += '</tbody></table>';
+    document.getElementById('monthlyTable2').innerHTML = h;
+  });
+
+  // Load ops
+  var fs = s;
+  if (window._filterType) fs += '&type='+window._filterType;
+  if (window._filterFrom) fs += '&date_from='+window._filterFrom;
+  if (window._filterTo) fs += '&date_to='+window._filterTo;
+  loadOpsFor(fs, page, perPage, 'opsBody2', 'pagination2', tab);
+}
+
+function loadChart(canvasId, url) {
+  apiP(url).then(function(r) { return r.json(); }).then(function(data) {
+    if (chart) chart.destroy();
+    var ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+    chart = new Chart(ctx.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: data.map(function(p) { var d=p.date; return d ? d.slice(8,10)+'/'+d.slice(5,7) : ''; }),
+        datasets: [{ label:'Solde', data:data.map(function(p){return p.balance}), borderColor:'#0f7b73', backgroundColor:'rgba(15,123,115,0.1)', fill:true, tension:0.3, pointRadius:2 }]
+      },
+      options: { responsive:true, scales:{y:{beginAtZero:false}}, plugins:{legend:{display:false}} }
+    });
+  });
+}
+
+function loadOps() {
+  var s = qs();
+  apiP('/api/caisse/operations?'+s+'&page='+currentPage+'&per_page=20').then(function(r) { return r.json(); }).then(function(ops) {
+    apiP('/api/caisse/operations/count?'+s).then(function(r) { return r.json(); }).then(function(cd) {
+      var total = cd.count || 0;
+      var pages = Math.max(1, Math.ceil(total / 20));
+      var h = '';
+      if (!ops.length) h = '<tr><td colspan="6" style="color:#888;text-align:center">Aucune opération</td></tr>';
+      else ops.forEach(function(o) {
+        var isIn = o.type === 'in';
+        h += '<tr class="'+(isIn?'in':'out')+'">';
+        h += '<td>'+fmtFR(o.operation_date)+'</td><td>'+esc(o.libelle)+'</td><td>'+esc(CAISSE_LABELS[o.caisse]||o.caisse)+'</td>';
+        h += '<td><span class="badge '+(isIn?'badge-in':'badge-out')+'">'+(isIn?'Entrée':'Sortie')+'</span></td>';
+        h += '<td>'+Number(o.amount).toFixed(3)+'</td>';
+        h += '<td class="actions"><a href="#" onclick="editOp('+o.id+');return false">✏️</a> <a href="#" onclick="deleteOp('+o.id+');return false">🗑️</a></td>';
+        h += '</tr>';
+      });
+      document.getElementById('opsBody').innerHTML = h;
+      var ph = '';
+      for (var i=1;i<=pages;i++) ph += '<a href="#" class="'+(i===currentPage?'active':'')+'" onclick="switchPage('+i+');return false">'+i+'</a>';
+      document.getElementById('pagination').innerHTML = ph;
+    });
+  });
+}
+
+function loadOpsFor(s, page, perPage, bodyId, pagId, tab) {
+  s += '&caisse=' + tab;
+  apiP('/api/caisse/operations?'+s+'&page='+page+'&per_page='+perPage).then(function(r) { return r.json(); }).then(function(ops) {
+    apiP('/api/caisse/operations/count?'+s).then(function(r) { return r.json(); }).then(function(cd) {
+      var total = cd.count || 0;
+      var pages = Math.max(1, Math.ceil(total / perPage));
+      var h = '';
+      if (!ops.length) h = '<tr><td colspan="6" style="color:#888;text-align:center">Aucune opération</td></tr>';
+      else ops.forEach(function(o) {
+        var isIn = o.type === 'in';
+        h += '<tr class="'+(isIn?'in':'out')+'">';
+        h += '<td>'+fmtFR(o.operation_date)+'</td><td>'+esc(o.libelle)+'</td>';
+        h += '<td><span class="badge '+(isIn?'badge-in':'badge-out')+'">'+(isIn?'Entrée':'Sortie')+'</span></td>';
+        h += '<td>'+Number(o.amount).toFixed(3)+'</td><td>'+esc(o.payment_method)+'</td>';
+        h += '<td class="actions"><a href="#" onclick="editOp('+o.id+');return false">✏️</a> <a href="#" onclick="deleteOp('+o.id+');return false">🗑️</a></td>';
+        h += '</tr>';
+      });
+      document.getElementById(bodyId).innerHTML = h;
+      var ph = '';
+      for (var i=1;i<=pages;i++) ph += '<a href="#" class="'+(i===page?'active':'')+'" onclick="window._tmpPage='+i+';renderCaisseView(\''+tab+'\',\''+s+'\','+i+','+perPage+');return false">'+i+'</a>';
+      document.getElementById(pagId).innerHTML = ph;
+    });
+  });
+}
+
+function switchTab(caisse) {
+  document.querySelectorAll('.caisse-tabs a').forEach(function(a) {
+    a.classList.toggle('active', a.dataset.caisse === caisse);
+  });
+  currentTab = caisse;
+  currentPage = 1;
+  render();
+}
+
+function switchPage(p) { currentPage = p; render(); }
+
+function setType(t) { window._filterType = t; renderCaisseView(currentTab, qs(), currentPage, 20); }
+function applyDateFilter() { window._filterFrom = document.getElementById('fDateFrom').value; window._filterTo = document.getElementById('fDateTo').value; renderCaisseView(currentTab, qs(), currentPage, 20); }
 
 function downloadExport(format) {
   var s = qs();
+  if (window._filterType) s += '&type='+window._filterType;
+  if (window._filterFrom) s += '&date_from='+window._filterFrom;
+  if (window._filterTo) s += '&date_to='+window._filterTo;
   var url = '/api/caisse/export/' + format + '?' + s;
   fetch(url, { headers: { 'Authorization': 'Bearer ' + getToken() } }).then(function(r) {
     if (!r.ok) throw new Error('Export failed');
@@ -328,9 +470,11 @@ function downloadExport(format) {
   }).catch(function(e) { alert('Erreur export: ' + e.message); });
 }
 
+function esc(s) { if (s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
 // Init
 cancelEdit();
-loadPage(1);
+render();
 </script>
 </body>
 </html>
