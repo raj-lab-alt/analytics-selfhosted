@@ -649,18 +649,17 @@ router.get('/benefices/current', async (req, res) => {
     const debut = mois + '-01';
     const fin = new Date(new Date(debut).getTime() + 32 * 86400000).toISOString().slice(0, 10);
 
-    // Fetch all operations for the month
+    // Fetch ALL operations (no date filter) for current solde
     const { data: ops, error } = await db.getClient()
       .from('caisse_operations')
-      .select('caisse, type, amount, note')
-      .gte('operation_date', debut)
-      .lt('operation_date', fin);
+      .select('caisse, type, amount, note');
     if (error) throw error;
 
-    // Calculate solde for achats and associes (all operations)
+    // Calculate solde for achats and associes (excluding advances)
     let soldeAchats = 0, soldeAssocies = 0;
     (ops || []).forEach(r => {
       const amt = parseFloat(r.amount) || 0;
+      if (r.note && r.note.startsWith('Avance associé')) return;
       if (r.caisse === 'achats') soldeAchats += r.type === 'in' ? amt : -amt;
       if (r.caisse === 'associes') soldeAssocies += r.type === 'in' ? amt : -amt;
     });
@@ -671,7 +670,7 @@ router.get('/benefices/current', async (req, res) => {
     const { data: associes, error: ae } = await db.getClient().from('caisse_associes').select('*').eq('actif', true).order('nom');
     if (ae) throw ae;
 
-    // Fetch advances for this month grouped by associate
+    // Fetch advances for this month only
     const { data: avances, error: ave } = await db.getClient()
       .from('caisse_avances')
       .select('associe_id, montant')
@@ -719,10 +718,11 @@ router.post('/benefices/calculer', async (req, res) => {
     const previewResp = await (async () => {
       const debut = mois + '-01';
       const fin = new Date(new Date(debut).getTime() + 32 * 86400000).toISOString().slice(0, 10);
-      const { data: ops } = await db.getClient().from('caisse_operations').select('caisse, type, amount, note').gte('operation_date', debut).lt('operation_date', fin);
+      const { data: ops } = await db.getClient().from('caisse_operations').select('caisse, type, amount, note');
       let sa = 0, so = 0;
       (ops || []).forEach(r => {
         const amt = parseFloat(r.amount) || 0;
+        if (r.note && r.note.startsWith('Avance associé')) return;
         if (r.caisse === 'achats') sa += r.type === 'in' ? amt : -amt;
         if (r.caisse === 'associes') so += r.type === 'in' ? amt : -amt;
       });
