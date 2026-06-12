@@ -20,6 +20,36 @@ ALTER TABLE caisse_operations ADD COLUMN IF NOT EXISTS parent_id BIGINT DEFAULT 
 ALTER TABLE caisse_operations ADD COLUMN IF NOT EXISTS colis INT DEFAULT NULL;
 ALTER TABLE caisse_operations ADD COLUMN IF NOT EXISTS livreurs INT DEFAULT NULL;
 CREATE INDEX IF NOT EXISTS idx_caisse_parent ON caisse_operations (parent_id);
+CREATE TABLE IF NOT EXISTS caisse_associes (
+  id BIGSERIAL PRIMARY KEY,
+  nom VARCHAR(100) NOT NULL,
+  pct DECIMAL(5,2) NOT NULL DEFAULT 0,
+  actif BOOLEAN DEFAULT TRUE
+);
+CREATE TABLE IF NOT EXISTS caisse_avances (
+  id BIGSERIAL PRIMARY KEY,
+  associe_id BIGINT REFERENCES caisse_associes(id),
+  montant DECIMAL(12,3) NOT NULL,
+  source_caisse VARCHAR(20) NOT NULL CHECK (source_caisse IN ('associes','achats')),
+  date_avance DATE NOT NULL,
+  rembourse BOOLEAN DEFAULT FALSE,
+  date_remboursement DATE,
+  note TEXT,
+  operation_id BIGINT REFERENCES caisse_operations(id)
+);
+CREATE TABLE IF NOT EXISTS caisse_benefices (
+  id BIGSERIAL PRIMARY KEY,
+  mois DATE NOT NULL UNIQUE,
+  benefice_brut DECIMAL(12,3) DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS caisse_benefices_detail (
+  id BIGSERIAL PRIMARY KEY,
+  benefice_id BIGINT REFERENCES caisse_benefices(id),
+  associe_id BIGINT REFERENCES caisse_associes(id),
+  part_brute DECIMAL(12,3) DEFAULT 0,
+  total_avances DECIMAL(12,3) DEFAULT 0,
+  solde_a_payer DECIMAL(12,3) DEFAULT 0
+);
 `;
 
 async function runMigration() {
