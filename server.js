@@ -86,6 +86,7 @@ const db = require('./src/db');
 const { collect, processEvent } = require('./src/collect');
 const { setupWebSocket, getActiveSessions } = require('./src/realtime');
 const { aggregateHourly, aggregateDaily, cleanup, cleanupStaleSessions } = require('./src/aggregate');
+const { runMigration } = require('./src/migrate');
 const dashboardApi = require('./src/dashboard-api');
 const caisseApi = require('./src/caisse-api');
 
@@ -155,6 +156,10 @@ app.get('/install', async (req, res) => {
   const fs = require('fs');
   const sql = fs.readFileSync(path.join(__dirname, 'install.sql'), 'utf8');
   const migrateSql = fs.readFileSync(path.join(__dirname, 'migrate.sql'), 'utf8');
+  const caisseMigrationSql = fs.readFileSync(path.join(__dirname, 'src', 'migrate.js'), 'utf8');
+  // Extract the SQL from migrate.js
+  const sqlMatch = caisseMigrationSql.match(/const sql = `([^`]+)`/);
+  const caisseSql = sqlMatch ? sqlMatch[1] : '';
   res.send(`<!DOCTYPE html><html><body style="font-family:sans-serif;max-width:800px;margin:2em auto">
     <h1>Installation Analytics</h1>
     <p>1. Va dans <a href="https://supabase.com/dashboard/project/aupxallaghkovsauwgcz" target="_blank">Supabase Dashboard</a></p>
@@ -164,14 +169,16 @@ app.get('/install', async (req, res) => {
     <pre style="background:#f4f4f4;padding:1em;overflow:auto;max-height:500px;border:1px solid #ddd">${sql.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
     <hr><h2>Migration (si tables existent déjà)</h2>
     <p>Exécute ceci si les tables <strong>raw_events</strong> existent déjà :</p>
-    <pre style="background:#f4f4f4;padding:1em;overflow:auto;max-height:200px;border:1px solid #ddd">${migrateSql.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+    <pre style="background:#f4f4f4;padding:1em;overflow:auto;max-height:600px;border:1px solid #ddd">${migrateSql.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+${caisseSql.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
     <p>5. <a href="/">Retour au dashboard</a></p>
   </body></html>`);
 });
 
 setupWebSocket(wss);
 
-// Run aggregation on startup then periodically
+// Run migration on startup then aggregation
+runMigration();
 aggregateDaily();
 aggregateHourly();
 setTimeout(() => cleanupStaleSessions(), 60000);

@@ -4,6 +4,7 @@ const db = require('./db');
 const PDFDocument = require('pdfkit');
 
 const CAISSES = ['recettes', 'associes', 'media_buy', 'loyer_charges', 'achats'];
+const QUOTA_CAISSES = ['associes', 'media_buy', 'loyer_charges', 'achats'];
 const CAISSE_LABELS = { recettes: 'Recettes', associes: 'Associés', media_buy: 'Media Buy', loyer_charges: 'Loyer & Charges', achats: 'Achats' };
 
 function fmtFR(d) {
@@ -13,7 +14,6 @@ function fmtFR(d) {
 }
 function fmtAmount(n) { return Number(n).toFixed(3); }
 
-// Helper: apply caisse/type/date filters to a query
 function applyFilters(q, query) {
   if (CAISSES.includes(query.caisse)) q = q.eq('caisse', query.caisse);
   if (query.type === 'in' || query.type === 'out') q = q.eq('type', query.type);
@@ -21,6 +21,236 @@ function applyFilters(q, query) {
   if (query.date_to) q = q.lte('operation_date', query.date_to);
   return q;
 }
+
+async function getQuotas() {
+  const { data, error } = await db.getClient().from('caisse_quotas').select('*').order('caisse');
+  if (error) throw error;
+  const map = {};
+  (data || []).forEach(q => { map[q.caisse] = q; });
+  return map;
+}
+
+async function recalculateQuotas(recetteId, recetteAmount, recetteLibelle) {
+  const quotas = await getQuotas();
+  const associes = quotas['associes'];
+  const children = [];
+
+  if (associes && associes.type === 'formule' && associes.valeur > 0) {
+    const colis = null;
+    const livreurs = null;
+    children.push({ caisse: 'associes', type: 'out', amount: 0, libelle: '' });
+  }
+  return children;
+}
+
+async function createQuotaOps(recetteId, recetteAmount, recetteLibelle, colis, livreurs) {
+  const quotas = await getQuotas();
+  const ops = [];
+  let reste = recetteAmount;
+
+  // Associés (formule fixe)
+  const aQuota = quotas['associes'];
+  const aVal = aQuota ? parseFloat(aQuota.valeur) : 0;
+  let associesAmount = 0;
+  if (aQuota && aQuota.type === 'formule' && aVal > 0 && colis && livreurs) {
+    associesAmount = colis * livreurs * aVal;
+    if (associesAmount > 0) {
+      ops.push({
+        operation_date: new Date().toISOString().slice(0, 10),
+        libelle: 'Quote-part livreurs: ' + recetteLibelle,
+        type: 'out',
+        amount: associesAmount,
+        currency: 'TND',
+        caisse: 'associes',
+        parent_id: recetteId,
+        note: 'Auto (colis=' + colis + ', livreurs=' + livreurs + ', taux=' + aVal + ')',
+      });
+      reste -= associesAmount;
+    }
+  }
+
+  // Pourcentages sur le reste
+  if (reste > 0) {
+    for (const c of QUOTA_CAISSES) {
+      if (c === 'associes') continue;
+      const q = quotas[c];
+      if (!q || q.type !== 'pourcentage') continue;
+      const pct = parseFloat(q.valeur);
+      if (pct <= 0) continue;
+      const amt = reste * pct / 100;
+      if (amt > 0) {
+        ops.push({
+          operation_date: new Date().toISOString().slice(0, 10),
+          libelle: 'Quote-part ' + CAISSE_LABELS[c] + ': ' + recetteLibelle,
+          type: 'out',
+          amount: Math.round(amt * 1000) / 1000,
+          currency: 'TND',
+          caisse: c,
+          parent_id: recetteId,
+          note: 'Auto (' + pct + '% de ' + reste + ')',
+        });
+      }
+    }
+  }
+
+  return ops;
+}
+
+// --- GET /api/caisse/config ---
+router.get('/config', async (req, res) => {
+  try {
+    const { data, error } = await db.getClient().from('caisse_quotas').select('*').order('caisse');
+    if (error) throw error;
+    const rows = data || [];
+    let totalPct = 0;
+    rows.forEach(r => { if (r.type === 'pourcentage') totalPct += parseFloat(r.valeur) || 0; });
+    res.json({ quotas: rows, total_pourcentage: Math.round(totalPct * 100) / 100 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- PUT /api/caisse/config ---
+router.put('/config', async (req, res) => {
+  try {
+    const updates = req.body;
+    if (!Array.isArray(updates)) return res.status(400).json({ error: 'Body must be an array' });
+    for (const u of updates) {
+      if (!QUOTA_CAISSES.includes(u.caisse)) continue;
+      const typ = u.type === 'formule' ? 'formule' : 'pourcentage';
+      const val = parseFloat(u.valeur);
+      if (isNaN(val) || val < 0) continue;
+      const { error } = await db.getClient().from('caisse_quotas').upsert({
+        caisse: u.caisse,
+        type: typ,
+        valeur: typ === 'pourcentage' ? Math.min(val, 100) : val,
+      }, { onConflict: 'caisse' });
+      if (error) throw error;
+    }
+    // Re-fetch
+    const { data, error } = await db.getClient().from('caisse_quotas').select('*').order('caisse');
+    if (error) throw error;
+    const rows = data || [];
+    let totalPct = 0;
+    rows.forEach(r => { if (r.type === 'pourcentage') totalPct += parseFloat(r.valeur) || 0; });
+    res.json({ quotas: rows, total_pourcentage: Math.round(totalPct * 100) / 100 });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- POST /api/caisse/operations ---
+router.post('/operations', async (req, res) => {
+  try {
+    const b = req.body;
+    if (!b.libelle || !b.libelle.trim()) return res.status(400).json({ error: 'Libellé requis' });
+    const caisse = b.caisse || 'recettes';
+    if (!CAISSES.includes(caisse)) return res.status(400).json({ error: 'Caisse invalide' });
+    if (b.type !== 'in' && b.type !== 'out') return res.status(400).json({ error: 'Type invalide' });
+    const amt = parseFloat(b.amount);
+    if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: 'Montant invalide' });
+    const opDate = b.operation_date || new Date().toISOString().slice(0, 10);
+
+    const insertBody = {
+      operation_date: opDate,
+      libelle: b.libelle.trim(),
+      type: b.type,
+      amount: amt,
+      currency: 'TND',
+      caisse,
+      payment_method: (b.payment_method || '').trim(),
+      reference: (b.reference || '').trim(),
+      note: (b.note || '').trim(),
+    };
+
+    // Store colis/livreurs for recettes
+    if (b.type === 'in' && b.colis !== undefined) insertBody.colis = parseInt(b.colis) || null;
+    if (b.type === 'in' && b.livreurs !== undefined) insertBody.livreurs = parseInt(b.livreurs) || null;
+
+    const { data, error } = await db.getClient().from('caisse_operations').insert(insertBody).select();
+    if (error) throw error;
+    const recette = data[0];
+
+    // Quota logic for recettes
+    if (b.type === 'in' && b.appliquer_quotas !== false) {
+      const colis = parseInt(b.colis) || 0;
+      const livreurs = parseInt(b.livreurs) || 0;
+      const quotaOps = await createQuotaOps(recette.id, amt, b.libelle.trim(), colis, livreurs);
+      for (const qOp of quotaOps) {
+        qOp.operation_date = opDate;
+        const { error: qErr } = await db.getClient().from('caisse_operations').insert(qOp);
+        if (qErr) console.error('Quota insert error:', qErr.message);
+      }
+    }
+
+    res.json(recette);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- PUT /api/caisse/operations/:id ---
+router.put('/operations/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID invalide' });
+    const b = req.body;
+
+    // Fetch existing
+    const { data: existing, error: fetchErr } = await db.getClient().from('caisse_operations').select('*').eq('id', id).single();
+    if (fetchErr || !existing) return res.status(404).json({ error: 'Introuvable' });
+
+    const upd = {};
+    if (b.libelle !== undefined) upd.libelle = b.libelle.trim();
+    if (CAISSES.includes(b.caisse)) upd.caisse = b.caisse;
+    if (b.type === 'in' || b.type === 'out') upd.type = b.type;
+    if (b.amount !== undefined) { const a = parseFloat(b.amount); if (!isNaN(a) && a > 0) upd.amount = a; }
+    if (b.operation_date) upd.operation_date = b.operation_date;
+    if (b.payment_method !== undefined) upd.payment_method = b.payment_method.trim();
+    if (b.reference !== undefined) upd.reference = b.reference.trim();
+    if (b.note !== undefined) upd.note = b.note.trim();
+
+    // Store colis/livreurs
+    if (b.colis !== undefined) upd.colis = parseInt(b.colis) || null;
+    if (b.livreurs !== undefined) upd.livreurs = parseInt(b.livreurs) || null;
+
+    const { data, error } = await db.getClient().from('caisse_operations').update(upd).eq('id', id).select();
+    if (error) throw error;
+    if (!data || !data.length) return res.status(404).json({ error: 'Introuvable' });
+
+    // If recette with amount/colis/livreurs changed, recalculate children
+    const isRecette = existing.type === 'in';
+    const amountChanged = upd.amount && upd.amount !== parseFloat(existing.amount);
+    const colisChanged = upd.colis !== undefined && upd.colis !== existing.colis;
+    const livreursChanged = upd.livreurs !== undefined && upd.livreurs !== existing.livreurs;
+
+    if (isRecette && b.appliquer_quotas !== false && (amountChanged || colisChanged || livreursChanged)) {
+      // Delete old children
+      await db.getClient().from('caisse_operations').delete().eq('parent_id', id);
+      // Recreate with new values
+      const newAmount = upd.amount || parseFloat(existing.amount);
+      const newColis = upd.colis !== undefined ? upd.colis : existing.colis;
+      const newLivreurs = upd.livreurs !== undefined ? upd.livreurs : existing.livreurs;
+      const newLibelle = upd.libelle || existing.libelle;
+      const newDate = upd.operation_date || existing.operation_date;
+      const quotaOps = await createQuotaOps(id, newAmount, newLibelle, newColis, newLivreurs);
+      for (const qOp of quotaOps) {
+        qOp.operation_date = newDate;
+        const { error: qErr } = await db.getClient().from('caisse_operations').insert(qOp);
+        if (qErr) console.error('Quota recalc error:', qErr.message);
+      }
+    }
+
+    res.json(data[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// --- DELETE /api/caisse/operations/:id ---
+router.delete('/operations/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    if (!id) return res.status(400).json({ error: 'ID invalide' });
+    // Cascade delete children first
+    await db.getClient().from('caisse_operations').delete().eq('parent_id', id);
+    const { error } = await db.getClient().from('caisse_operations').delete().eq('id', id);
+    if (error) throw error;
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
 
 // --- GET /api/caisse/operations ---
 router.get('/operations', async (req, res) => {
@@ -50,66 +280,6 @@ router.get('/operations/count', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// --- POST /api/caisse/operations ---
-router.post('/operations', async (req, res) => {
-  try {
-    const b = req.body;
-    if (!b.libelle || !b.libelle.trim()) return res.status(400).json({ error: 'Libellé requis' });
-    const caisse = b.caisse || 'recettes';
-    if (!CAISSES.includes(caisse)) return res.status(400).json({ error: 'Caisse invalide' });
-    if (b.type !== 'in' && b.type !== 'out') return res.status(400).json({ error: 'Type invalide' });
-    const amt = parseFloat(b.amount);
-    if (isNaN(amt) || amt <= 0) return res.status(400).json({ error: 'Montant invalide' });
-    const opDate = b.operation_date || new Date().toISOString().slice(0, 10);
-    const { data, error } = await db.getClient().from('caisse_operations').insert({
-      operation_date: opDate,
-      libelle: b.libelle.trim(),
-      type: b.type,
-      amount: amt,
-      currency: 'TND',
-      caisse,
-      payment_method: (b.payment_method || '').trim(),
-      reference: (b.reference || '').trim(),
-      note: (b.note || '').trim(),
-    }).select();
-    if (error) throw error;
-    res.json(data[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// --- PUT /api/caisse/operations/:id ---
-router.put('/operations/:id', async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    if (!id) return res.status(400).json({ error: 'ID invalide' });
-    const b = req.body;
-    const upd = {};
-    if (b.libelle !== undefined) upd.libelle = b.libelle.trim();
-    if (CAISSES.includes(b.caisse)) upd.caisse = b.caisse;
-    if (b.type === 'in' || b.type === 'out') upd.type = b.type;
-    if (b.amount !== undefined) { const a = parseFloat(b.amount); if (!isNaN(a) && a > 0) upd.amount = a; }
-    if (b.operation_date) upd.operation_date = b.operation_date;
-    if (b.payment_method !== undefined) upd.payment_method = b.payment_method.trim();
-    if (b.reference !== undefined) upd.reference = b.reference.trim();
-    if (b.note !== undefined) upd.note = b.note.trim();
-    const { data, error } = await db.getClient().from('caisse_operations').update(upd).eq('id', id).select();
-    if (error) throw error;
-    if (!data || !data.length) return res.status(404).json({ error: 'Introuvable' });
-    res.json(data[0]);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// --- DELETE /api/caisse/operations/:id ---
-router.delete('/operations/:id', async (req, res) => {
-  try {
-    const id = parseInt(req.params.id);
-    if (!id) return res.status(400).json({ error: 'ID invalide' });
-    const { error } = await db.getClient().from('caisse_operations').delete().eq('id', id);
-    if (error) throw error;
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 // --- GET /api/caisse/summary ---
 router.get('/summary', async (req, res) => {
   try {
@@ -125,7 +295,6 @@ router.get('/summary', async (req, res) => {
       if (r.type === 'in') totals[c].in += amt;
       else totals[c].out += amt;
     });
-    // Build per-caisse + central
     const caisses = {};
     let centralIn = 0, centralOut = 0;
     CAISSES.forEach(c => {

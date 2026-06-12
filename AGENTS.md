@@ -68,6 +68,25 @@ Sans heatmap :
 - `POST /api/sites` → Ajouter un site (body: {name, domain})
 - WebSocket `/ws?site_id=1` → Mise à jour temps réel
 
+## Supabase
+- `SUPABASE_URL=https://aupxallaghkovsauwgcz.supabase.co`
+- `SUPABASE_KEY` = anon key (dans .env)
+- `SUPABASE_SERVICE_ROLE_KEY` = service_role key (dans .env)
+
+## Caisse Module
+- **CRUD**: POST/GET/PUT/DELETE `/api/caisse/operations`
+- **Config**: GET/PUT `/api/caisse/config` (quotas%)
+- **Summary**: GET `/api/caisse/summary`, GET `/api/caisse/central`, GET `/api/caisse/daily`, GET `/api/caisse/monthly`, GET `/api/caisse/chart?days=30`
+- **Export**: GET `/api/caisse/export/csv`, GET `/api/caisse/export/pdf`
+- Table `caisse_quotas`: `caisse VARCHAR(20) UNIQUE`, `type(pourcentage|formule)`, `valeur DECIMAL(10,2)`
+- Table `caisse_operations` columns: `parent_id BIGINT`, `colis INT`, `livreurs INT`
+- **Quota logic** (recette → quote-parts):
+  1. Associés = colis × livreurs × valeur_formule (montant fixe)
+  2. Reste = recette - associés
+  3. Chaque caisse % = Reste × quota% / 100
+- Delete cascade: supprime les lignes `parent_id = id`
+- Onglets: `[+ Opération] [Centrale] [Recettes] [Associés] [Media Buy] [Loyer & Charges] [Achats] [Configuration]`
+
 ## Conventions
 - Pas de dépendances lourdes au-delà de Express, pg, ws, @supabase/supabase-js
 - Le tracker JS doit rester < 10KB

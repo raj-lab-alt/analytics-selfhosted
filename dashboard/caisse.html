@@ -34,6 +34,18 @@
 .caisse-central-table .clickable { cursor:pointer }
 .caisse-central-table .clickable:hover { background:#f0f4ff }
 
+.quota-preview { background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px; margin-top:8px }
+.quota-preview h4 { margin:0 0 6px; font-size:13px; color:#166534 }
+.quota-preview .qp-row { display:flex; justify-content:space-between; font-size:12px; padding:2px 0; border-bottom:1px dashed #dcfce7 }
+.quota-preview .qp-row:last-child { border-bottom:none }
+.quota-preview .qp-total { font-weight:700; border-top:2px solid #166534; margin-top:4px; padding-top:4px }
+
+.quota-config-table { width:100% }
+.quota-config-table th { background:#4e73df; color:#fff; text-align:left }
+.quota-config-table td, .quota-config-table th { padding:8px 12px }
+.quota-config-table input { width:80px; padding:4px 8px; border:1px solid #ddd; border-radius:4px; text-align:right }
+.quota-config-table .warning { color:#e74a3b; font-weight:600 }
+
 .chart-container canvas { max-height:200px }
 .insights-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px }
 .insights-grid .card { overflow:auto; max-height:300px }
@@ -64,55 +76,21 @@
 
   <!-- Onglets -->
   <div class="caisse-tabs" id="caisseTabs">
-    <a href="#" data-caisse="" class="active">Centrale</a>
+    <a href="#" data-caisse="new-op" class="active" style="background:#fffbeb;border-color:#fde68a;font-weight:700">+ Opération</a>
+    <a href="#" data-caisse="">Centrale</a>
     <a href="#" data-caisse="recettes">Recettes</a>
     <a href="#" data-caisse="associes">Associés</a>
     <a href="#" data-caisse="media_buy">Media Buy</a>
     <a href="#" data-caisse="loyer_charges">Loyer & Charges</a>
     <a href="#" data-caisse="achats">Achats</a>
-  </div>
-
-  <!-- Formulaire de saisie (toujours visible) -->
-  <div class="card" style="margin-bottom:16px">
-    <h2 id="formTitle">Nouvelle opération</h2>
-    <form id="opForm" class="caisse-form">
-      <input type="hidden" name="edit_id" id="editId" value="">
-      <p><label>Date</label><input type="text" id="fDate" class="input" placeholder="jj/mm/aaaa" required></p>
-      <p><label>Libellé</label><input type="text" id="fLibelle" class="input" placeholder="Description" required></p>
-      <div class="full amount-row">
-        <div class="amount-field in">
-          <label>Recette (Entrée)</label>
-          <input type="number" id="fAmountIn" step="0.001" min="0" placeholder="0.000">
-        </div>
-        <div class="amount-field out">
-          <label>Dépense (Sortie)</label>
-          <input type="number" id="fAmountOut" step="0.001" min="0" placeholder="0.000">
-        </div>
-      </div>
-      <p><label>Caisse auxiliaire</label>
-        <select id="fCaisse" class="input" required>
-          <option value="recettes">Recettes</option>
-          <option value="associes">Associés</option>
-          <option value="media_buy">Media Buy</option>
-          <option value="loyer_charges">Loyer & Charges</option>
-          <option value="achats">Achats</option>
-        </select>
-      </p>
-      <p><label>Mode de paiement</label><input type="text" id="fPayment" class="input" maxlength="30"></p>
-      <p><label>Référence</label><input type="text" id="fRef" class="input" maxlength="100"></p>
-      <p class="full"><label>Note</label><textarea id="fNote" class="input" rows="2"></textarea></p>
-      <p class="full">
-        <button type="submit" class="btn btn-primary" id="formSubmit">Enregistrer</button>
-        <button type="button" class="btn" id="formCancel" style="display:none" onclick="cancelEdit()">Annuler</button>
-      </p>
-    </form>
+    <a href="#" data-caisse="config" style="font-weight:500">Configuration</a>
   </div>
 
   <!-- Contenu dynamique -->
   <div id="caisseContent"></div>
 
-  <!-- Exports -->
-  <div style="margin-top:12px;display:flex;gap:8px">
+  <!-- Exports (hidden on form/config tabs) -->
+  <div id="exportBar" style="margin-top:12px;display:none;gap:8px">
     <button class="btn btn-sm" onclick="downloadExport('csv')">Exporter CSV</button>
     <button class="btn btn-sm" onclick="downloadExport('pdf')">Exporter PDF</button>
   </div>
@@ -120,8 +98,9 @@
 
 <script>
 var CAISSES = ['recettes','associes','media_buy','loyer_charges','achats'];
+var QUOTA_CAISSES = ['associes','media_buy','loyer_charges','achats'];
 var CAISSE_LABELS = { recettes:'Recettes', associes:'Associés', media_buy:'Media Buy', loyer_charges:'Loyer & Charges', achats:'Achats' };
-var currentTab = '', currentPage = 1, chart = null;
+var currentTab = 'new-op', currentPage = 1, chart = null;
 
 function getToken() { return localStorage.getItem('token'); }
 function apiP(path, opts) {
@@ -139,7 +118,7 @@ function todayFR() {
 }
 function qs() {
   var p = new URLSearchParams();
-  if (currentTab) p.set('caisse', currentTab);
+  if (currentTab && currentTab !== 'new-op' && currentTab !== 'config') p.set('caisse', currentTab);
   return p.toString();
 }
 
@@ -155,53 +134,131 @@ document.querySelectorAll('.caisse-tabs a').forEach(function(a) {
   });
 });
 
-// Form: clear the opposite amount field
-document.getElementById('fAmountIn').addEventListener('input', function() {
-  if (this.value) document.getElementById('fAmountOut').value = '';
-});
-document.getElementById('fAmountOut').addEventListener('input', function() {
-  if (this.value) document.getElementById('fAmountIn').value = '';
-});
+function render() {
+  if (currentTab === 'new-op') renderNewOp();
+  else if (currentTab === 'config') renderConfig();
+  else renderNormalView();
+}
 
-function cancelEdit() {
-  document.getElementById('editId').value = '';
-  document.getElementById('formTitle').textContent = 'Nouvelle opération';
-  document.getElementById('formSubmit').textContent = 'Enregistrer';
-  document.getElementById('formCancel').style.display = 'none';
-  document.getElementById('opForm').reset();
+// --- New Operation Tab ---
+function renderNewOp() {
+  document.getElementById('exportBar').style.display = 'none';
+  var html = '<div class="card"><h2>Nouvelle opération</h2>';
+  html += '<form id="opForm" class="caisse-form">';
+  html += '<input type="hidden" name="edit_id" id="editId" value="">';
+  html += '<p><label>Date</label><input type="text" id="fDate" class="input" placeholder="jj/mm/aaaa" required></p>';
+  html += '<p><label>Libellé <span style="color:#e74a3b">*</span></label><input type="text" id="fLibelle" class="input" placeholder="Description" required></p>';
+  html += '<div class="full amount-row">';
+  html += '<div class="amount-field in"><label>Recette (Entrée)</label><input type="number" id="fAmountIn" step="0.001" min="0" placeholder="0.000"></div>';
+  html += '<div class="amount-field out"><label>Dépense (Sortie)</label><input type="number" id="fAmountOut" step="0.001" min="0" placeholder="0.000"></div>';
+  html += '</div>';
+  // Colis / livreurs (visible only for recette)
+  html += '<div class="full" id="quotaFields" style="display:none">';
+  html += '<div style="display:flex;gap:12px;margin-bottom:8px">';
+  html += '<p style="flex:1"><label>Nombre de colis</label><input type="number" id="fColis" class="input" min="1" step="1" placeholder="0"></p>';
+  html += '<p style="flex:1"><label>Nombre de livreurs / associés</label><input type="number" id="fLivreurs" class="input" min="1" step="1" placeholder="0"></p>';
+  html += '</div>';
+  html += '<p><label class="checkbox-label"><input type="checkbox" id="fAppliquerQuotas" checked> <span>Appliquer les quotas</span></label></p>';
+  html += '<div id="quotaPreview" class="quota-preview" style="display:none"></div>';
+  html += '</div>';
+  html += '<p><label>Caisse auxiliaire</label><select id="fCaisse" class="input" required>';
+  html += '<option value="recettes">Recettes</option><option value="associes">Associés</option><option value="media_buy">Media Buy</option><option value="loyer_charges">Loyer & Charges</option><option value="achats">Achats</option>';
+  html += '</select></p>';
+  html += '<p><label>Mode de paiement</label><input type="text" id="fPayment" class="input" maxlength="30"></p>';
+  html += '<p><label>Référence</label><input type="text" id="fRef" class="input" maxlength="100"></p>';
+  html += '<p class="full"><label>Note</label><textarea id="fNote" class="input" rows="2"></textarea></p>';
+  html += '<p class="full"><button type="submit" class="btn btn-primary" id="formSubmit">Enregistrer</button>';
+  html += '<button type="button" class="btn" id="formCancel" style="display:none" onclick="cancelEdit()">Annuler</button></p>';
+  html += '</form></div>';
+  document.getElementById('caisseContent').innerHTML = html;
+
+  bindFormEvents();
   document.getElementById('fDate').value = todayFR();
 }
 
-function editOp(id) {
-  apiP('/api/caisse/operations?per_page=200').then(function(r) { return r.json(); }).then(function(ops) {
-    var op = ops.find(function(o) { return o.id == id; });
-    if (!op) return;
-    document.getElementById('editId').value = op.id;
-    document.getElementById('formTitle').textContent = 'Modifier opération #' + op.id;
-    document.getElementById('formSubmit').textContent = 'Enregistrer';
-    document.getElementById('formCancel').style.display = 'inline-block';
-    document.getElementById('fDate').value = fmtFR(op.operation_date);
-    document.getElementById('fLibelle').value = op.libelle || '';
-    if (op.type === 'in') {
-      document.getElementById('fAmountIn').value = op.amount;
-      document.getElementById('fAmountOut').value = '';
-    } else {
-      document.getElementById('fAmountOut').value = op.amount;
-      document.getElementById('fAmountIn').value = '';
-    }
-    document.getElementById('fCaisse').value = op.caisse || 'recettes';
-    document.getElementById('fPayment').value = op.payment_method || '';
-    document.getElementById('fRef').value = op.reference || '';
-    document.getElementById('fNote').value = op.note || '';
+function bindFormEvents() {
+  var amtIn = document.getElementById('fAmountIn');
+  var amtOut = document.getElementById('fAmountOut');
+  var colis = document.getElementById('fColis');
+  var livreurs = document.getElementById('fLivreurs');
+  var applyQ = document.getElementById('fAppliquerQuotas');
+
+  amtIn.addEventListener('input', function() {
+    if (this.value) amtOut.value = '';
+    toggleQuotaFields();
+    updateQuotaPreview();
   });
+  amtOut.addEventListener('input', function() {
+    if (this.value) amtIn.value = '';
+    toggleQuotaFields();
+    updateQuotaPreview();
+  });
+  colis.addEventListener('input', updateQuotaPreview);
+  livreurs.addEventListener('input', updateQuotaPreview);
+  applyQ.addEventListener('change', function() {
+    var preview = document.getElementById('quotaPreview');
+    preview.style.display = this.checked && document.getElementById('fAmountIn').value ? 'block' : 'none';
+  });
+  document.getElementById('opForm').addEventListener('submit', submitForm);
 }
 
-function deleteOp(id) {
-  if (!confirm('Supprimer cette opération ?')) return;
-  apiP('/api/caisse/operations/' + id, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() { render(); });
+function toggleQuotaFields() {
+  var isRecette = !!document.getElementById('fAmountIn').value;
+  document.getElementById('quotaFields').style.display = isRecette ? 'block' : 'none';
 }
 
-document.getElementById('opForm').addEventListener('submit', function(e) {
+function updateQuotaPreview() {
+  var amtIn = parseFloat(document.getElementById('fAmountIn').value) || 0;
+  var colis = parseInt(document.getElementById('fColis').value) || 0;
+  var livreurs = parseInt(document.getElementById('fLivreurs').value) || 0;
+  var preview = document.getElementById('quotaPreview');
+  var applyQ = document.getElementById('fAppliquerQuotas');
+  if (!amtIn || !applyQ.checked) { preview.style.display = 'none'; return; }
+
+  apiP('/api/caisse/config').then(function(r) { return r.json(); }).then(function(cfg) {
+    var qm = {};
+    (cfg.quotas || []).forEach(function(q) { qm[q.caisse] = q; });
+    var associesVal = 0;
+    var associesQ = qm['associes'];
+    if (associesQ && associesQ.type === 'formule' && colis && livreurs) {
+      associesVal = colis * livreurs * parseFloat(associesQ.valeur);
+    }
+    var reste = amtIn - associesVal;
+    if (reste < 0) reste = 0;
+    var html = '<h4>Répartition automatique</h4>';
+    html += '<div class="qp-row"><span>Recette brute</span><span><strong>' + amtIn.toFixed(3) + '</strong> TND</span></div>';
+    if (associesVal > 0) {
+      html += '<div class="qp-row"><span>Associés (' + colis + ' colis × ' + livreurs + ' livreurs × ' + parseFloat(associesQ.valeur) + ' DT)</span><span style="color:#e74a3b">-' + associesVal.toFixed(3) + '</span></div>';
+    }
+    html += '<div class="qp-row"><span>Reste à répartir</span><span>' + reste.toFixed(3) + ' TND</span></div>';
+    var totalPct = 0;
+    QUOTA_CAISSES.forEach(function(c) {
+      if (c === 'associes') return;
+      var q = qm[c];
+      if (!q || q.type !== 'pourcentage') return;
+      var pct = parseFloat(q.valeur) || 0;
+      if (pct <= 0) return;
+      totalPct += pct;
+      var amt = reste * pct / 100;
+      html += '<div class="qp-row"><span>' + (CAISSE_LABELS[c]||c) + ' (' + pct + '%)</span><span style="color:#e74a3b">-' + amt.toFixed(3) + '</span></div>';
+    });
+    var net = amtIn - associesVal;
+    QUOTA_CAISSES.forEach(function(c) {
+      if (c === 'associes') return;
+      var q = qm[c];
+      if (!q || q.type !== 'pourcentage') return;
+      var pct = parseFloat(q.valeur) || 0;
+      if (pct <= 0) return;
+      net -= reste * pct / 100;
+    });
+    html += '<div class="qp-row qp-total"><span>Recette nette conservée</span><span>' + net.toFixed(3) + ' TND</span></div>';
+    if (totalPct > 100) html += '<div style="color:#e74a3b;font-size:11px;margin-top:4px">⚠ Somme des % dépasse 100 %</div>';
+    preview.innerHTML = html;
+    preview.style.display = 'block';
+  }).catch(function() { preview.style.display = 'none'; });
+}
+
+function submitForm(e) {
   e.preventDefault();
   var editId = document.getElementById('editId').value;
   var amtIn = parseFloat(document.getElementById('fAmountIn').value) || 0;
@@ -219,26 +276,40 @@ document.getElementById('opForm').addEventListener('submit', function(e) {
     payment_method: document.getElementById('fPayment').value,
     reference: document.getElementById('fRef').value,
     note: document.getElementById('fNote').value,
+    appliquer_quotas: document.getElementById('fAppliquerQuotas') ? document.getElementById('fAppliquerQuotas').checked : false,
   };
+  if (type === 'in') {
+    body.colis = parseInt(document.getElementById('fColis').value) || 0;
+    body.livreurs = parseInt(document.getElementById('fLivreurs').value) || 0;
+  }
   var url = editId ? '/api/caisse/operations/' + editId : '/api/caisse/operations';
   var method = editId ? 'PUT' : 'POST';
   apiP(url, { method: method, body: JSON.stringify(body) }).then(function(r) {
     if (!r.ok) { r.json().then(function(e) { alert(e.error || 'Erreur'); }); return; }
     cancelEdit();
-    render();
+    alert('Opération enregistrée');
+    document.getElementById('opForm').reset();
+    document.getElementById('quotaFields').style.display = 'none';
+    document.getElementById('quotaPreview').style.display = 'none';
+    document.getElementById('fDate').value = todayFR();
   });
-});
+}
 
-function render() {
+function cancelEdit() {
+  document.getElementById('editId').value = '';
+  document.getElementById('formSubmit').textContent = 'Enregistrer';
+  document.getElementById('formCancel').style.display = 'none';
+}
+
+// --- Normal Tab View (Centrale / per-caisse) ---
+function renderNormalView() {
+  document.getElementById('exportBar').style.display = 'flex';
   var s = qs();
   var perPage = 20;
   var p = currentPage;
 
-  if (currentTab === '') {
-    renderCentral();
-  } else {
-    renderCaisseView(currentTab, s, p, perPage);
-  }
+  if (currentTab === '') renderCentral();
+  else renderCaisseView(currentTab, s, p, perPage);
 
   // Summary cards
   apiP('/api/caisse/summary?' + s).then(function(r) { return r.json(); }).then(function(sum) {
@@ -263,23 +334,14 @@ function render() {
 
 function renderCentral() {
   var html = '';
-
-  // Tableau central
   html += '<div class="card" style="margin-bottom:16px"><h2>Centrale — Synthèse par caisse</h2>';
   html += '<table class="caisse-central-table"><thead><tr><th>Caisse</th><th>Entrées</th><th>Sorties</th><th>Solde</th></tr></thead><tbody id="centralRows"></tbody></table></div>';
-
-  // Chart
   html += '<div class="card chart-container"><h2>Évolution du solde global</h2><canvas id="centralChart" height="180"></canvas></div>';
-
-  // Insights
   html += '<div class="insights-grid"><div class="card"><h2>Journalier</h2><div id="dailyTable"></div></div>';
   html += '<div class="card"><h2>Mensuel</h2><div id="monthlyTable"></div></div></div>';
-
   html += '<div class="card"><h2>Toutes les opérations</h2><div class="caisse-table-wrap"><table class="caisse-table"><thead><tr><th>Date</th><th>Libellé</th><th>Caisse</th><th>Type</th><th>Montant</th><th>Actions</th></tr></thead><tbody id="opsBody"></tbody></table></div><div id="pagination" class="pagination"></div></div>';
-
   document.getElementById('caisseContent').innerHTML = html;
 
-  // Load central table
   apiP('/api/caisse/central').then(function(r) { return r.json(); }).then(function(d) {
     var rows = '';
     d.rows.forEach(function(r) {
@@ -288,11 +350,7 @@ function renderCentral() {
     rows += '<tr class="total-row"><td><strong>Total</strong></td><td>'+d.central.in.toFixed(3)+'</td><td>'+d.central.out.toFixed(3)+'</td><td>'+d.central.balance.toFixed(3)+'</td></tr>';
     document.getElementById('centralRows').innerHTML = rows;
   });
-
-  // Load chart
   loadChart('centralChart', '/api/caisse/chart?days=30');
-
-  // Load daily/monthly
   apiP('/api/caisse/daily').then(function(r) { return r.json(); }).then(function(data) {
     var h = '<table><thead><tr><th>Date</th><th>Entrées</th><th>Sorties</th><th>Net</th></tr></thead><tbody>';
     if (!data.length) h += '<tr><td colspan="4" style="color:#888">Aucune donnée</td></tr>';
@@ -310,23 +368,15 @@ function renderCentral() {
     h += '</tbody></table>';
     document.getElementById('monthlyTable').innerHTML = h;
   });
-
-  // Load operations
   loadOps();
 }
 
 function renderCaisseView(tab, s, page, perPage) {
   var label = CAISSE_LABELS[tab] || tab;
   var html = '';
-
-  // Chart
   html += '<div class="card chart-container"><h2>Évolution du solde — '+esc(label)+'</h2><canvas id="caisseChart" height="180"></canvas></div>';
-
-  // Insights
   html += '<div class="insights-grid"><div class="card"><h2>Journalier</h2><div id="dailyTable2"></div></div>';
   html += '<div class="card"><h2>Mensuel</h2><div id="monthlyTable2"></div></div></div>';
-
-  // Filters
   html += '<div class="filters"><span style="font-weight:600">Filtrer type:</span>';
   html += '<button class="btn btn-sm" onclick="setType(\'\')" id="ftAll">Tous</button>';
   html += '<button class="btn btn-sm" onclick="setType(\'in\')" id="ftIn">Entrées</button>';
@@ -334,18 +384,12 @@ function renderCaisseView(tab, s, page, perPage) {
   html += ' <input type="text" id="fDateFrom" class="input" placeholder="Du jj/mm/aaaa" style="width:110px">';
   html += ' <input type="text" id="fDateTo" class="input" placeholder="Au jj/mm/aaaa" style="width:110px">';
   html += ' <button class="btn btn-sm" onclick="applyDateFilter()">OK</button></div>';
-
-  // Table
   html += '<div class="card"><h2>Opérations — '+esc(label)+'</h2>';
   html += '<div class="caisse-table-wrap"><table class="caisse-table"><thead><tr><th>Date</th><th>Libellé</th><th>Type</th><th>Montant</th><th>Mode</th><th>Actions</th></tr></thead><tbody id="opsBody2"></tbody></table></div>';
   html += '<div id="pagination2" class="pagination"></div></div>';
-
   document.getElementById('caisseContent').innerHTML = html;
 
-  // Load chart
   loadChart('caisseChart', '/api/caisse/chart?days=30&caisse='+tab);
-
-  // Load daily/monthly
   apiP('/api/caisse/daily?caisse='+tab).then(function(r) { return r.json(); }).then(function(data) {
     var h = '<table><thead><tr><th>Date</th><th>Entrées</th><th>Sorties</th><th>Net</th></tr></thead><tbody>';
     if (!data.length) h += '<tr><td colspan="4" style="color:#888">Aucune donnée</td></tr>';
@@ -363,13 +407,84 @@ function renderCaisseView(tab, s, page, perPage) {
     h += '</tbody></table>';
     document.getElementById('monthlyTable2').innerHTML = h;
   });
-
-  // Load ops
   var fs = s;
   if (window._filterType) fs += '&type='+window._filterType;
   if (window._filterFrom) fs += '&date_from='+window._filterFrom;
   if (window._filterTo) fs += '&date_to='+window._filterTo;
   loadOpsFor(fs, page, perPage, 'opsBody2', 'pagination2', tab);
+}
+
+// --- Config Tab ---
+function renderConfig() {
+  document.getElementById('exportBar').style.display = 'none';
+  var html = '<div class="card"><h2>Configuration des quotas</h2>';
+  html += '<p style="font-size:13px;color:#666;margin-bottom:12px">Définissez comment les recettes sont réparties automatiquement sur les caisses auxiliaires.</p>';
+  html += '<table class="quota-config-table"><thead><tr><th>Caisse</th><th>Type</th><th>Valeur</th><th>Description</th></tr></thead><tbody id="quotaConfigBody"></tbody></table>';
+  html += '<div id="quotaTotalBar" style="margin-top:8px;font-size:13px;font-weight:600"></div>';
+  html += '<p style="margin-top:12px"><button class="btn btn-primary" onclick="saveConfig()">Enregistrer la configuration</button></p></div>';
+  document.getElementById('caisseContent').innerHTML = html;
+
+  apiP('/api/caisse/config').then(function(r) { return r.json(); }).then(function(cfg) {
+    var qm = {};
+    (cfg.quotas || []).forEach(function(q) { qm[q.caisse] = q; });
+    var rows = '';
+    var totalPct = 0;
+    QUOTA_CAISSES.forEach(function(c) {
+      var q = qm[c] || { caisse: c, type: 'pourcentage', valeur: 0 };
+      if (c === 'associes') {
+        var val = parseFloat(q.valeur) || 1;
+        rows += '<tr><td><strong>'+esc(CAISSE_LABELS[c]||c)+'</strong></td><td>Formule (colis × livreurs × X)</td>';
+        rows += '<td><input type="number" id="qc_'+c+'" class="input" step="0.01" min="0" value="'+val.toFixed(2)+'" style="width:80px"></td>';
+        rows += '<td style="font-size:12px;color:#666">Montant par colis × livreur</td></tr>';
+      } else {
+        var val = parseFloat(q.valeur) || 0;
+        totalPct += val;
+        rows += '<tr><td><strong>'+esc(CAISSE_LABELS[c]||c)+'</strong></td><td>Pourcentage du reste</td>';
+        rows += '<td><input type="number" id="qc_'+c+'" class="input" step="0.01" min="0" max="100" value="'+val.toFixed(2)+'" style="width:80px"> %</td>';
+        rows += '<td style="font-size:12px;color:#666">Appliqué après déduction associés</td></tr>';
+      }
+    });
+    document.getElementById('quotaConfigBody').innerHTML = rows;
+    updateTotalBar(totalPct);
+    // Live total update
+    QUOTA_CAISSES.forEach(function(c) {
+      if (c === 'associes') return;
+      var el = document.getElementById('qc_'+c);
+      if (el) el.addEventListener('input', function() { updateTotalBarLive(); });
+    });
+  });
+}
+
+function updateTotalBar(pct) {
+  var el = document.getElementById('quotaTotalBar');
+  var warn = pct > 100 ? ' <span style="color:#e74a3b">⚠ Le total dépasse 100 %</span>' : '';
+  el.innerHTML = 'Total des pourcentages : <strong>' + pct.toFixed(2) + '%</strong> / 100%' + warn;
+}
+
+function updateTotalBarLive() {
+  var total = 0;
+  QUOTA_CAISSES.forEach(function(c) {
+    if (c === 'associes') return;
+    var el = document.getElementById('qc_'+c);
+    if (el) total += parseFloat(el.value) || 0;
+  });
+  updateTotalBar(Math.round(total * 100) / 100);
+}
+
+function saveConfig() {
+  var updates = [];
+  QUOTA_CAISSES.forEach(function(c) {
+    var el = document.getElementById('qc_'+c);
+    if (!el) return;
+    var val = parseFloat(el.value) || 0;
+    if (c === 'associes') updates.push({ caisse: c, type: 'formule', valeur: val });
+    else updates.push({ caisse: c, type: 'pourcentage', valeur: val });
+  });
+  apiP('/api/caisse/config', { method: 'PUT', body: JSON.stringify(updates) }).then(function(r) {
+    if (!r.ok) { r.json().then(function(e) { alert(e.error || 'Erreur'); }); return; }
+    alert('Configuration enregistrée');
+    renderConfig();
+  });
 }
 
 function loadChart(canvasId, url) {
@@ -438,6 +553,40 @@ function loadOpsFor(s, page, perPage, bodyId, pagId, tab) {
   });
 }
 
+function editOp(id) {
+  apiP('/api/caisse/operations?per_page=200').then(function(r) { return r.json(); }).then(function(ops) {
+    var op = ops.find(function(o) { return o.id == id; });
+    if (!op) return;
+    // Switch to new-op tab
+    switchTab('new-op');
+    document.getElementById('editId').value = op.id;
+    document.getElementById('formSubmit').textContent = 'Modifier';
+    document.getElementById('formCancel').style.display = 'inline-block';
+    document.getElementById('fDate').value = fmtFR(op.operation_date);
+    document.getElementById('fLibelle').value = op.libelle || '';
+    if (op.type === 'in') {
+      document.getElementById('fAmountIn').value = op.amount;
+      document.getElementById('fAmountOut').value = '';
+    } else {
+      document.getElementById('fAmountOut').value = op.amount;
+      document.getElementById('fAmountIn').value = '';
+    }
+    document.getElementById('fCaisse').value = op.caisse || 'recettes';
+    document.getElementById('fPayment').value = op.payment_method || '';
+    document.getElementById('fRef').value = op.reference || '';
+    document.getElementById('fNote').value = op.note || '';
+    if (op.colis) document.getElementById('fColis').value = op.colis;
+    if (op.livreurs) document.getElementById('fLivreurs').value = op.livreurs;
+    toggleQuotaFields();
+    updateQuotaPreview();
+  });
+}
+
+function deleteOp(id) {
+  if (!confirm('Supprimer cette opération ? Les écritures de quota liées seront aussi supprimées.')) return;
+  apiP('/api/caisse/operations/' + id, { method: 'DELETE' }).then(function(r) { return r.json(); }).then(function() { if (currentTab !== 'new-op' && currentTab !== 'config') renderNormalView(); });
+}
+
 function switchTab(caisse) {
   document.querySelectorAll('.caisse-tabs a').forEach(function(a) {
     a.classList.toggle('active', a.dataset.caisse === caisse);
@@ -447,7 +596,7 @@ function switchTab(caisse) {
   render();
 }
 
-function switchPage(p) { currentPage = p; render(); }
+function switchPage(p) { currentPage = p; if (currentTab && currentTab !== 'new-op' && currentTab !== 'config') renderNormalView(); }
 
 function setType(t) { window._filterType = t; renderCaisseView(currentTab, qs(), currentPage, 20); }
 function applyDateFilter() { window._filterFrom = document.getElementById('fDateFrom').value; window._filterTo = document.getElementById('fDateTo').value; renderCaisseView(currentTab, qs(), currentPage, 20); }
@@ -473,7 +622,6 @@ function downloadExport(format) {
 function esc(s) { if (s==null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // Init
-cancelEdit();
 render();
 </script>
 </body>

@@ -9,7 +9,8 @@ if (!supabaseUrl || !supabaseKey) {
   console.error('Missing SUPABASE_URL / SUPABASE_KEY in .env');
   process.exit(1);
 }
-const supabase = createClient(supabaseUrl, supabaseKey);
+const ws = require('ws');
+const supabase = createClient(supabaseUrl, supabaseKey, { realtime: { transport: ws } });
 
 const CAISSES = [
   { file: 'caisse_recettes.csv', caisse: 'recettes' },

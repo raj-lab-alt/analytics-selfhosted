@@ -156,6 +156,20 @@ CREATE TABLE IF NOT EXISTS stats_hourly (
   UNIQUE (site_id, heure)
 );
 
+CREATE TABLE IF NOT EXISTS caisse_quotas (
+  id SERIAL PRIMARY KEY,
+  caisse VARCHAR(20) NOT NULL UNIQUE,
+  type VARCHAR(15) NOT NULL DEFAULT 'pourcentage' CHECK (type IN ('pourcentage','formule')),
+  valeur DECIMAL(10,2) NOT NULL DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+INSERT INTO caisse_quotas (caisse, type, valeur) VALUES
+  ('associes','formule',1.00),
+  ('media_buy','pourcentage',20.00),
+  ('loyer_charges','pourcentage',10.00),
+  ('achats','pourcentage',40.00)
+ON CONFLICT (caisse) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS caisse_operations (
   id BIGSERIAL PRIMARY KEY,
   operation_date DATE NOT NULL,
@@ -167,10 +181,14 @@ CREATE TABLE IF NOT EXISTS caisse_operations (
   payment_method VARCHAR(30) DEFAULT '',
   reference VARCHAR(100) DEFAULT '',
   note TEXT DEFAULT '',
+  parent_id BIGINT DEFAULT NULL,
+  colis INT DEFAULT NULL,
+  livreurs INT DEFAULT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_caisse_date ON caisse_operations (operation_date);
 CREATE INDEX IF NOT EXISTS idx_caisse_caisse ON caisse_operations (caisse);
+CREATE INDEX IF NOT EXISTS idx_caisse_parent ON caisse_operations (parent_id);
 
 CREATE TABLE IF NOT EXISTS stats_daily (
   id SERIAL PRIMARY KEY,
