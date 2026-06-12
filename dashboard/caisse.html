@@ -323,6 +323,7 @@ function submitForm(e) {
     document.getElementById('quotaFields').style.display = 'none';
     document.getElementById('quotaPreview').style.display = 'none';
     document.getElementById('fDate').value = todayFR();
+    if (window._previousTab) { switchTab(window._previousTab); window._previousTab = null; } else { render(); }
     checkMediaBuyThreshold();
   });
 }
@@ -716,6 +717,8 @@ function loadOpsFor(s, page, perPage, bodyId, pagId, tab) {
 }
 
 function editOp(id) {
+  // Store current tab to return after save
+  window._previousTab = currentTab;
   apiP('/api/caisse/operations?per_page=200').then(function(r) { return r.json(); }).then(function(ops) {
     var op = ops.find(function(o) { return o.id == id; });
     if (!op) return;
